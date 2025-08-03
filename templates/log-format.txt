@@ -1,0 +1,36 @@
+[{{ now | date "2006-01-02 15:04:05" }}] {{ .Request.Method | upper | printf "%-7s" }} {{ .Request.URL.Path }}
+Request ID: {{ uuidv4 }}
+User Agent: {{ .Headers.User-Agent | default "Unknown" }}
+{{- if .Headers.Authorization }}
+Auth: {{ .Headers.Authorization | trunc 20 }}...
+{{- else }}
+Auth: None
+{{- end }}
+{{- if .Query }}
+
+Query Parameters:
+{{- range $key, $value := .Query }}
+  {{ $key }}: {{ $value }}
+{{- end }}
+{{- end }}
+{{- if .Params }}
+
+URL Parameters:
+{{- range $key, $value := .Params }}
+  {{ $key }}: {{ $value }}
+{{- end }}
+{{- end }}
+{{- if .Body }}
+
+Request Body:
+{{ .Body | toPrettyJson | indent 2 }}
+{{- end }}
+
+Server Info:
+  Instance: mockingjay-{{ randAlphaNum 6 | lower }}
+  Processing Time: {{ randInt 1 100 }}ms
+  Memory Usage: {{ randInt 10 200 }}MB
+  Active Connections: {{ randInt 1 50 }}
+
+Response Generated: {{ now | date "2006-01-02T15:04:05Z07:00" }}
+---

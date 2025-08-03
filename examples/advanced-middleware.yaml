@@ -1,0 +1,166 @@
+# Advanced Middleware Configuration Example
+#
+# This example demonstrates advanced middleware configuration patterns:
+# 1. Restrictive CORS setup for production use
+# 2. JSON-formatted logging with custom skip paths
+# 3. Multiple API endpoints with different authentication requirements
+#
+# Usage:
+#   mockingjay -config examples/advanced-middleware.yaml -port 3000
+#
+# Test scenarios:
+#   # Test allowed origin
+#   curl -H "Origin: https://myapp.com" -v localhost:3000/api/public
+#
+#   # Test unauthorized origin (should not get CORS headers)
+#   curl -H "Origin: https://malicious.com" -v localhost:3000/api/public
+#
+#   # Test preflight for authenticated endpoint
+#   curl -X OPTIONS -H "Origin: https://myapp.com" -H "Access-Control-Request-Headers: Authorization" localhost:3000/api/private
+#
+#   # Test with authentication
+#   curl -H "Origin: https://myapp.com" -H "Authorization: Bearer secret123" localhost:3000/api/private
+
+middleware:
+  enabled:
+    # Production-ready CORS configuration
+    - type: "cors"
+      config:
+        # Only allow specific production domains
+        allow_origins:
+          - "https://myapp.com"
+          - "https://admin.myapp.com"
+          - "http://localhost:3000" # For local development
+
+        # Restrict methods to only what's needed
+        allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+
+        # Allow authentication and custom headers
+        allow_headers:
+          - "Content-Type"
+          - "Authorization"
+          - "X-API-Key"
+          - "X-Requested-With"
+          - "X-Request-ID"
+
+        # Expose custom headers to the client
+        expose_headers:
+          - "X-Total-Count"
+          - "X-Rate-Limit"
+          - "X-Request-ID"
+
+        # Allow credentials for authenticated endpoints
+        allow_credentials: true
+
+        # Cache preflight for 24 hours
+        max_age: 86400
+
+    # JSON logging for production log aggregation
+    - type: "logger"
+      config:
+        # JSON format for structured logging systems (ELK, etc.)
+        format: "json"
+
+        # Info level for production
+        level: "info"
+
+        # Skip health checks and monitoring endpoints
+        skip_paths:
+          - "/health"
+          - "/healthz"
+          - "/ping"
+          - "/metrics"
+
+routes:
+  # Public API endpoint - no authentication required
+  - path: "/api/public"
+    verb: "GET"
+    template: |
+      {
+        "message": "Public endpoint accessible to all origins",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "origin": "{{ .Headers.Origin }}",
+        "data": {
+          "version": "1.0",
+          "status": "public"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-API-Version: "1.0"
+      X-Request-ID: "{{ randAlphaNum 8 }}"
+
+  # Private API endpoint - requires authentication
+  - path: "/api/private"
+    verb: "GET"
+    matchHeaders:
+      Authorization: "/Bearer .+/" # Require Bearer token
+    template: |
+      {
+        "message": "Private endpoint - authentication required",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "user": "authenticated",
+        "token": "{{ trimPrefix "Bearer " .Headers.Authorization }}",
+        "data": {
+          "sensitive": "This data requires authentication",
+          "permissions": ["read", "write"]
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-API-Version: "1.0"
+      X-Request-ID: "{{ randAlphaNum 8 }}"
+
+  # API Key endpoint - different authentication method
+  - path: "/api/admin"
+    verb: "GET"
+    matchHeaders:
+      X-API-Key: "/^[a-zA-Z0-9]{32}$/" # Require 32-character API key
+    template: |
+      {
+        "message": "Admin endpoint - API key required",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "api_key": "{{ .Headers.X-API-Key }}",
+        "admin": true,
+        "data": {
+          "users_count": {{ randInt 100 1000 }},
+          "system_status": "operational"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-API-Version: "1.0"
+      X-Request-ID: "{{ randAlphaNum 8 }}"
+      X-Admin-Access: "true"
+
+  # POST endpoint for testing CORS preflight
+  - path: "/api/data"
+    verb: "POST"
+    template: |
+      {
+        "message": "Data created successfully",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "received": {{ .Body | toPrettyJson }},
+        "id": "{{ randUUID }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Request-ID: "{{ randAlphaNum 8 }}"
+
+  # Monitoring endpoint (skipped by logger)
+  - path: "/ping"
+    verb: "GET"
+    template: "pong"
+
+  # Custom health endpoint (different from built-in /health)
+  - path: "/healthz"
+    verb: "GET"
+    template: |
+      {
+        "status": "healthy",
+        "service": "mockingjay-api",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "uptime": "{{ now.Sub .Request.Context.Value "start_time" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"

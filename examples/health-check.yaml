@@ -1,0 +1,101 @@
+# Health Check & Status Example
+# Demonstrates monitoring endpoints with various health indicators
+
+routes:
+  # Basic health check
+  - path: "/health"
+    verb: "GET"
+    template: |
+      {
+        "status": "healthy",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "uptime": "{{ now | dateModify "-72h" | date "2006-01-02T15:04:05Z07:00" }}",
+        "checks": {
+          "database": "ok",
+          "redis": "ok",
+          "external_api": "ok"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      Cache-Control: "no-cache"
+
+  # Detailed health status
+  - path: "/health/detailed"
+    verb: "GET"
+    template: |
+      {
+        "service": "mockingjay",
+        "version": "1.0.0",
+        "status": "healthy",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "environment": "{{ .Query.env | default "production" }}",
+        "uptime_seconds": {{ randInt 3600 86400 }},
+        "memory_usage": {
+          "allocated": "{{ randInt 10 100 }}MB",
+          "heap": "{{ randInt 5 50 }}MB"
+        },
+        "database": {
+          "status": "connected",
+          "connection_pool": {
+            "active": {{ randInt 1 10 }},
+            "idle": {{ randInt 0 5 }},
+            "max": 20
+          }
+        },
+        "dependencies": [
+          {
+            "name": "external-api",
+            "status": "{{ list "ok" "degraded" | shuffle | first }}",
+            "response_time": "{{ randInt 50 200 }}ms"
+          },
+          {
+            "name": "cache-service",
+            "status": "ok",
+            "response_time": "{{ randInt 1 10 }}ms"
+          }
+        ]
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Readiness probe
+  - path: "/ready"
+    verb: "GET"
+    template: |
+      {
+        "ready": true,
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Liveness probe
+  - path: "/alive"
+    verb: "GET"
+    template: "OK"
+    responseHeaders:
+      Content-Type: "text/plain"
+
+  # Metrics endpoint
+  - path: "/metrics"
+    verb: "GET"
+    template: |
+      # HELP http_requests_total Total number of HTTP requests
+      # TYPE http_requests_total counter
+      http_requests_total{method="GET",status="200"} {{ randInt 1000 10000 }}
+      http_requests_total{method="POST",status="200"} {{ randInt 100 1000 }}
+      http_requests_total{method="GET",status="404"} {{ randInt 10 100 }}
+
+      # HELP http_request_duration_seconds HTTP request duration
+      # TYPE http_request_duration_seconds histogram
+      http_request_duration_seconds_bucket{le="0.1"} {{ randInt 500 1000 }}
+      http_request_duration_seconds_bucket{le="0.5"} {{ randInt 800 1500 }}
+      http_request_duration_seconds_bucket{le="1.0"} {{ randInt 900 1800 }}
+      http_request_duration_seconds_bucket{le="+Inf"} {{ randInt 1000 2000 }}
+
+      # HELP memory_usage_bytes Current memory usage
+      # TYPE memory_usage_bytes gauge
+      memory_usage_bytes {{ mul (randInt 50 200) 1048576 }}
+    responseHeaders:
+      Content-Type: "text/plain; version=0.0.4"

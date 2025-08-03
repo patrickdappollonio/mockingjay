@@ -1,0 +1,160 @@
+# Custom Response Headers Examples
+# Demonstrates static and dynamic response header generation
+
+routes:
+  # Static response headers
+  - path: "/api/static-headers"
+    verb: "GET"
+    template: |
+      {
+        "message": "Response with static headers",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-API-Version: "1.0"
+      X-Powered-By: "mockingjay"
+      Cache-Control: "max-age=3600"
+      Access-Control-Allow-Origin: "*"
+
+  # Dynamic headers using template context
+  - path: "/api/dynamic-headers"
+    verb: "GET"
+    template: |
+      {
+        "message": "Response with dynamic headers",
+        "request_id": "{{ .Headers.X-Request-ID | default "generated-id" }}",
+        "user_agent": "{{ .Headers.User-Agent }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Request-ID: "{{ .Headers.X-Request-ID | default (uuidv4) }}"
+      X-User-Agent: "{{ .Headers.User-Agent }}"
+      X-Server-Time: '{{ now | date "2006-01-02T15:04:05Z07:00" }}'
+      X-Response-Generated: "{{ now | unixEpoch }}"
+
+  # CORS headers based on request origin
+  - path: "/api/cors-enabled"
+    verb: "GET"
+    template: |
+      {
+        "message": "CORS-enabled endpoint",
+        "origin": "{{ .Headers.Origin | default "none" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      Access-Control-Allow-Origin: '{{ .Headers.Origin | default "*" }}'
+      Access-Control-Allow-Methods: "GET, POST, PUT, DELETE, OPTIONS"
+      Access-Control-Allow-Headers: "Content-Type, Authorization, X-Requested-With"
+      Access-Control-Max-Age: "86400"
+
+  # Authentication-aware headers
+  - path: "/api/user-context"
+    verb: "GET"
+    template: |
+      {
+        "message": "User context endpoint",
+        "authenticated": {{ if .Headers.Authorization }}true{{ else }}false{{ end }},
+        "user_id": "{{ if .Headers.Authorization }}user123{{ else }}anonymous{{ end }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-User-Type: "{{ if .Headers.Authorization }}authenticated{{ else }}anonymous{{ end }}"
+      X-Session-Token: "{{ if .Headers.Authorization }}{{ .Headers.Authorization | sha256sum | trunc 16 }}{{ else }}none{{ end }}"
+
+  # Rate limiting headers
+  - path: "/api/rate-limited"
+    verb: "GET"
+    template: |
+      {
+        "message": "Rate limited endpoint",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-RateLimit-Limit: "100"
+      X-RateLimit-Remaining: "{{ randInt 10 99 }}"
+      X-RateLimit-Reset: '{{ now | dateModify "+1h" | unixEpoch }}'
+      X-RateLimit-Window: "3600"
+
+  # File download with content headers
+  - path: "/^/download/(?P<filename>[^/]+)$/"
+    verb: "GET"
+    template: |
+      This is the content of file: {{ .Params.filename }}
+
+      Generated at: {{ now | date "2006-01-02 15:04:05 UTC" }}
+      File size: {{ randInt 1024 1048576 }} bytes
+    responseHeaders:
+      Content-Type: "application/octet-stream"
+      Content-Disposition: 'attachment; filename="{{ .Params.filename }}"'
+      Content-Length: "{{ randInt 1024 1048576 }}"
+      X-File-Generated: '{{ now | date "2006-01-02T15:04:05Z07:00" }}'
+
+  # JSON with ETag for caching
+  - path: "/api/cached-data"
+    verb: "GET"
+    template: |
+      {
+        "data": {
+          "items": [
+            {"id": 1, "name": "cached_item_1"},
+            {"id": 2, "name": "cached_item_2"}
+          ]
+        },
+        "generated_at": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      ETag: '"{{ now | date "20060102-150405" | sha256sum | trunc 16 }}"'
+      Cache-Control: "public, max-age=300"
+      Last-Modified: '{{ now | dateModify "-1h" | date "Mon, 02 Jan 2006 15:04:05 GMT" }}'
+
+  # Health check with custom headers
+  - path: "/health-with-headers"
+    verb: "GET"
+    template: |
+      {
+        "status": "healthy",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "checks_passed": {{ randInt 5 10 }}
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Health-Check-Version: "2.1"
+      X-Service-Name: "mockingjay"
+      X-Environment: '{{ .Query.env | default "production" }}'
+      X-Check-Timestamp: "{{ now | unixEpoch }}"
+      Cache-Control: "no-cache, no-store, must-revalidate"
+
+  # Redirect with location header
+  - path: "/redirect-example"
+    verb: "GET"
+    template: |
+      {
+        "message": "This endpoint would normally redirect",
+        "redirect_url": "/new-location",
+        "status": "302 Found"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      Location: "/new-location"
+      X-Redirect-Reason: "endpoint_moved"
+
+  # WebAPI with security headers
+  - path: "/api/secure-endpoint"
+    verb: "POST"
+    template: |
+      {
+        "message": "Secure endpoint response",
+        "data": {{ .Body | toJson }},
+        "processed_at": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      X-XSS-Protection: "1; mode=block"
+      Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+      Content-Security-Policy: "default-src 'self'"
+      Referrer-Policy: "strict-origin-when-cross-origin"

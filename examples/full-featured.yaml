@@ -1,0 +1,314 @@
+# Full-Featured Example Configuration
+# Comprehensive demonstration of all mockingjay features
+
+routes:
+  # Basic routes
+  - path: "/"
+    template: |
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Mockingjay Demo Server</title>
+          <style>
+              body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+              .endpoint { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+              .method { font-weight: bold; color: #2196F3; }
+          </style>
+      </head>
+      <body>
+          <h1>🐦 Mockingjay Demo Server</h1>
+          <p>Server started at: {{ now | date "2006-01-02 15:04:05 UTC" }}</p>
+
+          <h2>Available Endpoints:</h2>
+
+          <div class="endpoint">
+              <span class="method">GET</span> <code>/health</code> - Health check
+          </div>
+          <div class="endpoint">
+              <span class="method">GET</span> <code>/users/{id}</code> - Get user by ID
+          </div>
+          <div class="endpoint">
+              <span class="method">POST</span> <code>/users</code> - Create user (requires JSON)
+          </div>
+          <div class="endpoint">
+              <span class="method">GET</span> <code>/api/secure</code> - Requires Authorization header
+          </div>
+          <div class="endpoint">
+              <span class="method">GET</span> <code>/files/{path}</code> - File download simulation
+          </div>
+      </body>
+      </html>
+    responseHeaders:
+      Content-Type: "text/html; charset=utf-8"
+
+  # Health check endpoint
+  - path: "/health"
+    verb: "GET"
+    template: |
+      {
+        "status": "healthy",
+        "version": "1.0.0",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "uptime_seconds": {{ randInt 3600 86400 }},
+        "environment": "{{ .Query.env | default "production" }}",
+        "server_info": {
+          "request_id": "{{ uuidv4 }}",
+          "instance": "mockingjay-{{ randAlphaNum 8 | lower }}"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Health-Check: "passed"
+      Cache-Control: "no-cache"
+
+  # User management with authentication
+  - path: "/^/users/(?P<id>\\d+)$/"
+    verb: "GET"
+    matchHeaders:
+      Authorization: "/Bearer .+/"
+    template: |
+      {
+        "id": {{ .Params.id }},
+        "username": "user{{ .Params.id }}",
+        "email": "user{{ .Params.id }}@example.com",
+        "profile": {
+          "name": "{{ list "Alice" "Bob" "Charlie" "Diana" "Eve" | shuffle | first }} User{{ .Params.id }}",
+          "avatar": "https://avatars.example.com/{{ .Params.id }}.jpg",
+          "bio": "Software developer with {{ randInt 1 10 }} years of experience",
+          "location": "{{ list "New York" "London" "Tokyo" "Sydney" "Berlin" | shuffle | first }}",
+          "joined": "{{ now | dateModify (printf "-%dh" (randInt 720 8760)) | date "2006-01-02" }}"
+        },
+        "stats": {
+          "followers": {{ randInt 10 5000 }},
+          "following": {{ randInt 5 1000 }},
+          "posts": {{ randInt 0 200 }},
+          "karma": {{ randInt 0 10000 }}
+        },
+        "preferences": {
+          "theme": "{{ list "light" "dark" "auto" | shuffle | first }}",
+          "notifications": {{ list true false | shuffle | first }},
+          "language": "{{ list "en" "es" "fr" "de" "ja" | shuffle | first }}"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-User-ID: "{{ .Params.id }}"
+      Cache-Control: "private, max-age=300"
+
+  # Unauthorized user access
+  - path: "/^/users/(?P<id>\\d+)$/"
+    verb: "GET"
+    template: |
+      {
+        "error": "Unauthorized",
+        "message": "Authentication required to access user data",
+        "code": 401,
+        "required_header": "Authorization: Bearer <token>",
+        "documentation": "https://api.example.com/docs/auth"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      WWW-Authenticate: 'Bearer realm="API"'
+
+  # Create user
+  - path: "/users"
+    verb: "POST"
+    template: |
+      {
+        "id": {{ randInt 1000 99999 }},
+        "username": "{{ .Body.username }}",
+        "email": "{{ .Body.email }}",
+        "name": "{{ .Body.name | default "New User" }}",
+        "created_at": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "status": "{{ if .Body.active }}active{{ else }}pending{{ end }}",
+        "profile": {
+          "avatar": "https://avatars.example.com/default.jpg",
+          "bio": "{{ .Body.bio | default "New user profile" }}",
+          "location": "{{ .Body.location | default "Unknown" }}"
+        },
+        "verification": {
+          "email_sent": true,
+          "token": "{{ randAlphaNum 32 }}",
+          "expires_at": "{{ now | dateModify "+24h" | date "2006-01-02T15:04:05Z07:00" }}"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      Location: "/users/{{ randInt 1000 99999 }}"
+      X-Created-At: '{{ now | date "2006-01-02T15:04:05Z07:00" }}'
+
+  # Search users with pagination
+  - path: "/users"
+    verb: "GET"
+    template: |
+      {
+        "users": [
+          {{- $limit := atoi (.Query.limit | default "10") }}
+          {{- $offset := atoi (.Query.offset | default "0") }}
+          {{- range $i := until $limit }}
+          {
+            "id": {{ add $offset $i 1 }},
+            "username": "user{{ add $offset $i 1 }}",
+            "name": "User {{ add $offset $i 1 }}",
+            "avatar": "https://avatars.example.com/{{ add $offset $i 1 }}.jpg",
+            "online": {{ list true false | shuffle | first }}
+          }{{ if not (eq $i (sub $limit 1)) }},{{ end }}
+          {{- end }}
+        ],
+        "pagination": {
+          "offset": {{ .Query.offset | default "0" | atoi }},
+          "limit": {{ .Query.limit | default "10" | atoi }},
+          "total": 1000,
+          "has_more": true
+        },
+        "filters": {
+          "search": "{{ .Query.q }}",
+          "sort": "{{ .Query.sort | default "created_at" }}",
+          "order": "{{ .Query.order | default "desc" }}"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Total-Count: "1000"
+
+  # Secure API endpoint with multiple auth methods
+  - path: "/api/secure"
+    matchHeaders:
+      Authorization: "/Bearer [A-Za-z0-9._-]+/"
+      X-API-Key: "/[0-9a-f]{32}/"
+    template: |
+      {
+        "message": "Access granted to secure endpoint",
+        "auth_info": {
+          "token_type": "bearer",
+          "api_key": "{{ .Headers.X-API-Key }}",
+          "token_hash": "{{ .Headers.Authorization | sha256sum | trunc 16 }}",
+          "permissions": ["read", "write", "admin"]
+        },
+        "data": {
+          "secret_value": "{{ randAlphaNum 16 }}",
+          "server_time": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+          "rate_limit": {
+            "remaining": {{ randInt 90 100 }},
+            "reset_at": "{{ now | dateModify "+1h" | unixEpoch }}"
+          }
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Auth-Method: "bearer+apikey"
+      X-RateLimit-Remaining: "{{ randInt 90 100 }}"
+
+  # File download simulation
+  - path: "/^/files/(?P<path>.+)$/"
+    verb: "GET"
+    template: |
+      File Content: {{ .Params.path }}
+
+      Generated at: {{ now | date "2006-01-02 15:04:05 UTC" }}
+      File size: {{ randInt 1024 10485760 }} bytes
+
+      This is simulated file content for: {{ .Params.path }}
+
+      Random data:
+      {{ range $i := until 10 }}
+      Line {{ $i }}: {{ randAlphaNum 20 }}
+      {{ end }}
+    responseHeaders:
+      Content-Type: "application/octet-stream"
+      Content-Disposition: 'attachment; filename="{{ .Params.path | base }}"'
+      X-File-Path: "{{ .Params.path }}"
+      X-Generated: '{{ now | date "2006-01-02T15:04:05Z07:00" }}'
+
+  # WebHook endpoint
+  - path: "/webhook"
+    verb: "POST"
+    matchHeaders:
+      X-Webhook-Signature: "/.+/"
+      Content-Type: "application/json"
+    template: |
+      {
+        "webhook_received": true,
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "signature": "{{ .Headers.X-Webhook-Signature }}",
+        "event": {
+          "id": "{{ uuidv4 }}",
+          "type": "{{ .Body.type | default "unknown" }}",
+          "data": {{ .Body | toJson }},
+          "processed": true
+        },
+        "response": {
+          "status": "accepted",
+          "processing_time": "{{ randInt 10 100 }}ms",
+          "queue_id": "{{ randAlphaNum 16 }}"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Webhook-ID: "{{ uuidv4 }}"
+      X-Processing-Time: "{{ randInt 10 100 }}ms"
+
+  # API versioning via Accept header
+  - path: "/api/data"
+    matchHeaders:
+      Accept: "/application\\/vnd\\.api\\+json;version=2/"
+    template: |
+      {
+        "version": 2,
+        "data": {
+          "items": [
+            {
+              "id": "{{ uuidv4 }}",
+              "type": "enhanced_item",
+              "attributes": {
+                "name": "Enhanced Item",
+                "created_at": "{{ now | dateModify "-24h" | date "2006-01-02T15:04:05Z07:00" }}",
+                "metadata": {
+                  "tags": ["new", "featured"],
+                  "priority": {{ randInt 1 5 }}
+                }
+              }
+            }
+          ]
+        },
+        "meta": {
+          "api_version": "2.0",
+          "format": "jsonapi"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/vnd.api+json;version=2"
+
+  # Default API version
+  - path: "/api/data"
+    template: |
+      {
+        "version": 1,
+        "data": ["legacy_item1", "legacy_item2"],
+        "meta": {
+          "api_version": "1.0",
+          "format": "simple"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # 404 fallback (should be last route)
+  - path: "/^.*$/"
+    template: |
+      {
+        "error": "Not Found",
+        "message": "The requested endpoint {{ .Request.URL.Path }} was not found",
+        "code": 404,
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "suggestion": "Check the API documentation at /",
+        "available_endpoints": [
+          "GET /",
+          "GET /health",
+          "GET /users/{id}",
+          "POST /users",
+          "GET /api/secure"
+        ]
+      }
+    responseHeaders:
+      Content-Type: "application/json"

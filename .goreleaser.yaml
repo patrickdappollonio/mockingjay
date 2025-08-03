@@ -1,0 +1,145 @@
+version: 2
+
+# Hooks to run before builds
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+# Build configuration
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - "386"
+    goarm:
+      - "6"
+      - "7"
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: windows
+        goarch: arm
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -extldflags "-static"
+
+# Archive configuration
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: ["zip"]
+    files:
+      - README.md
+      - LICENSE*
+      - examples/**/*
+      - templates/**/*
+
+# Docker images
+dockers:
+  - image_templates:
+      - "ghcr.io/patrickdappollonio/mockingjay:latest"
+      - "ghcr.io/patrickdappollonio/mockingjay:{{ .Tag }}"
+      - "ghcr.io/patrickdappollonio/mockingjay:v{{ .Major }}"
+      - "ghcr.io/patrickdappollonio/mockingjay:v{{ .Major }}.{{ .Minor }}"
+    dockerfile: Dockerfile
+    goos: linux
+    goarch: amd64
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.description=A simple HTTP server that reads YAML config and uses Go templates for dynamic responses"
+      - "--label=org.opencontainers.image.url=https://github.com/patrickdappollonio/mockingjay"
+      - "--label=org.opencontainers.image.source=https://github.com/patrickdappollonio/mockingjay"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+      - "--platform=linux/amd64"
+    extra_files:
+      - examples/
+      - templates/
+
+# Checksum configuration
+checksum:
+  name_template: "checksums.txt"
+
+# Snapshot configuration for development builds
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Changelog configuration
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "merge conflict"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+      - go mod tidy
+  groups:
+    - title: "New Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Performance Improvements"
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Other Changes"
+      order: 999
+
+# Release configuration
+release:
+  github:
+    owner: patrickdappollonio
+    name: mockingjay
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Release {{ .Tag }}
+
+    Welcome to this new release of Mockingjay!
+
+    ### Docker Images
+
+    ```bash
+    docker pull ghcr.io/patrickdappollonio/mockingjay:{{ .Tag }}
+    ```
+
+    ### Installing
+
+    #### Using Go
+    ```bash
+    go install github.com/patrickdappollonio/mockingjay@{{ .Tag }}
+    ```
+
+    #### Manual Installation
+    Download the appropriate binary for your platform from the attachments below.
+  footer: |
+    **Full Changelog**: https://github.com/patrickdappollonio/mockingjay/compare/{{ .PreviousTag }}...{{ .Tag }}

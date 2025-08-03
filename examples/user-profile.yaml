@@ -1,0 +1,105 @@
+# User Profile API Example
+# Demonstrates regex patterns, URL parameters, and CRUD operations
+
+routes:
+  # Get user by ID
+  - path: "/^/users/(?P<id>\\d+)$/"
+    verb: "GET"
+    template: |
+      {
+        "id": {{ .Params.id }},
+        "name": "User {{ .Params.id }}",
+        "email": "user{{ .Params.id }}@example.com",
+        "created_at": "{{ now | dateModify "-720h" | date "2006-01-02T15:04:05Z07:00" }}",
+        "last_login": "{{ now | dateModify "-24h" | date "2006-01-02T15:04:05Z07:00" }}",
+        "profile": {
+          "avatar": "https://avatars.example.com/user{{ .Params.id }}.jpg",
+          "bio": "This is the bio for user {{ .Params.id }}",
+          "location": "{{ list "New York" "London" "Tokyo" "Berlin" | shuffle | first }}"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      Cache-Control: "max-age=300"
+
+  # Get user by username (alphanumeric)
+  - path: "/^/users/(?P<username>[a-zA-Z0-9_]+)$/"
+    verb: "GET"
+    template: |
+      {
+        "username": "{{ .Params.username }}",
+        "display_name": "{{ .Params.username | title }}",
+        "followers": {{ randInt 10 10000 }},
+        "following": {{ randInt 5 1000 }},
+        "posts": {{ randInt 0 500 }},
+        "verified": {{ list true false | shuffle | first }}
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Create new user
+  - path: "/users"
+    verb: "POST"
+    template: |
+      {
+        "id": {{ randInt 1000 99999 }},
+        "username": "{{ .Body.username }}",
+        "email": "{{ .Body.email }}",
+        "name": "{{ .Body.name | default "Anonymous User" }}",
+        "created_at": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "status": "active"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      Location: "/users/{{ randInt 1000 99999 }}"
+
+  # Update user
+  - path: "/^/users/(?P<id>\\d+)$/"
+    verb: "PUT"
+    template: |
+      {
+        "id": {{ .Params.id }},
+        "updated_fields": [
+          {{- range $key, $value := .Body }}
+          "{{ $key }}"{{ if not (last $.Body) }},{{ end }}
+          {{- end }}
+        ],
+        "updated_at": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Delete user
+  - path: "/^/users/(?P<id>\\d+)$/"
+    verb: "DELETE"
+    template: |
+      {
+        "id": {{ .Params.id }},
+        "message": "User {{ .Params.id }} has been deleted",
+        "deleted_at": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # List users with pagination
+  - path: "/users"
+    verb: "GET"
+    template: |
+      {
+        "users": [
+          {{- range $i := until (atoi (.Query.limit | default "10")) }}
+          {
+            "id": {{ add (atoi ($.Query.offset | default "0")) $i 1 }},
+            "username": "user{{ add (atoi ($.Query.offset | default "0")) $i 1 }}",
+            "name": "User {{ add (atoi ($.Query.offset | default "0")) $i 1 }}"
+          }{{ if not (eq $i (sub (atoi ($.Query.limit | default "10")) 1)) }},{{ end }}
+          {{- end }}
+        ],
+        "pagination": {
+          "offset": {{ .Query.offset | default "0" | atoi }},
+          "limit": {{ .Query.limit | default "10" | atoi }},
+          "total": 1000
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"

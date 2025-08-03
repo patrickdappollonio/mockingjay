@@ -1,0 +1,54 @@
+# Template Files Example Configuration
+# Demonstrates using external template files instead of inline templates
+
+routes:
+  # HTML user profile using external template
+  - path: "/^/profile/(?P<username>[a-zA-Z0-9_]+)$/"
+    verb: "GET"
+    template_file: "./templates/user-profile.html"
+    responseHeaders:
+      Content-Type: "text/html; charset=utf-8"
+      Cache-Control: "max-age=300"
+
+  # Dashboard page
+  - path: "/dashboard"
+    verb: "GET"
+    template_file: "./templates/dashboard.html"
+    responseHeaders:
+      Content-Type: "text/html; charset=utf-8"
+      X-Dashboard-Version: "1.0"
+
+  # JSON API response using template file
+  - path: "/api/info"
+    verb: "GET"
+    template_file: "./templates/api-response.json"
+    responseHeaders:
+      Content-Type: "application/json"
+      X-API-Version: "2.0"
+
+  # API with POST data
+  - path: "/api/data"
+    verb: "POST"
+    template_file: "./templates/api-response.json"
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Log format endpoint
+  - path: "/logs"
+    verb: "GET"
+    template_file: "./templates/log-format.txt"
+    responseHeaders:
+      Content-Type: "text/plain"
+
+  # Error pages with different codes
+  - path: "/^/error/(?P<code>\\d+)$/"
+    verb: "GET"
+    template_file: "./templates/error-page.html"
+    responseHeaders:
+      Content-Type: "text/html; charset=utf-8"
+
+  # 404 fallback using error template
+  - path: "/^.*$/"
+    template_file: "./templates/error-page.html"
+    responseHeaders:
+      Content-Type: "text/html; charset=utf-8"

@@ -1,0 +1,80 @@
+# Middleware Demo Configuration
+#
+# This example demonstrates how to configure middleware in Mockingjay:
+# 1. CORS middleware for cross-origin request support
+# 2. Logger middleware for request logging with path exclusions
+#
+# Usage:
+#   mockingjay -config examples/middleware-demo.yaml
+#
+# Test CORS functionality:
+#   curl -H "Origin: http://localhost:3000" -v localhost:8080/api/data
+#   curl -X OPTIONS -H "Origin: http://localhost:3000" localhost:8080/api/data
+#
+# Test health endpoint (skipped by logger):
+#   curl localhost:8080/health
+
+middleware:
+  enabled:
+    # CORS Middleware - Enable cross-origin requests
+    - type: "cors"
+      config:
+        # Specific origins that are allowed to make requests
+        allow_origins: ["http://localhost:3000", "https://example.com"]
+
+        # HTTP methods allowed in CORS requests
+        allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+
+        # Headers that can be sent by the client
+        allow_headers: ["Content-Type", "Authorization", "X-Requested-With"]
+
+        # Allow credentials (cookies, auth headers) in CORS requests
+        allow_credentials: true
+
+        # How long (in seconds) browsers can cache preflight responses
+        max_age: 3600
+
+    # Logger Middleware - Log all requests except specified paths
+    - type: "logger"
+      config:
+        # Log format: "text" or "json"
+        format: "text"
+
+        # Log level: "debug", "info", "warn", "error"
+        level: "info"
+
+        # Paths to exclude from request logging (useful for health checks)
+        skip_paths: ["/health"]
+
+routes:
+  # API endpoint that benefits from CORS middleware
+  # When accessed from http://localhost:3000, CORS headers will be automatically added
+  - path: "/api/data"
+    verb: "GET"
+    template: |
+      {
+        "message": "Hello from CORS-enabled API!",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "data": ["item1", "item2", "item3"]
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # POST endpoint for testing CORS preflight requests
+  # Try: curl -X POST -H "Origin: http://localhost:3000" -H "Content-Type: application/json" -d '{"name":"John"}' localhost:8080/api/user
+  - path: "/api/user"
+    verb: "POST"
+    template: |
+      {
+        "message": "User created successfully",
+        "received_data": {{ .Body }},
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Simple health check endpoint
+  # This endpoint will NOT appear in request logs due to skip_paths configuration
+  - path: "/simple-health"
+    verb: "GET"
+    template: "OK"

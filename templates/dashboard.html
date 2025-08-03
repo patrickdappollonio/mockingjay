@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mockingjay Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.15);
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .card-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-right: 15px;
+        }
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .metric {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #3498db;
+            margin: 10px 0;
+        }
+        .metric-label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-healthy { background: #27ae60; }
+        .status-warning { background: #f39c12; }
+        .status-error { background: #e74c3c; }
+        .info-table {
+            width: 100%;
+            margin-top: 20px;
+        }
+        .info-table td {
+            padding: 8px 0;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        .info-table td:first-child {
+            font-weight: 600;
+            color: #34495e;
+            width: 40%;
+        }
+        .info-table td:last-child {
+            color: #7f8c8d;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        .endpoints {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        .endpoints h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+        .endpoint {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        .endpoint:last-child {
+            border-bottom: none;
+        }
+        .method {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            min-width: 60px;
+            text-align: center;
+            margin-right: 15px;
+        }
+        .method.get { background: #d4edda; color: #155724; }
+        .method.post { background: #cce5ff; color: #004085; }
+        .method.put { background: #fff3cd; color: #856404; }
+        .method.delete { background: #f8d7da; color: #721c24; }
+        .endpoint-path {
+            font-family: 'Courier New', monospace;
+            color: #495057;
+            flex: 1;
+        }
+        .endpoint-status {
+            margin-left: 15px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 0.9rem;
+            text-align: center;
+            margin-top: 30px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐦 Mockingjay</h1>
+            <p>Mock API Server Dashboard</p>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white;">
+                        ⚡
+                    </div>
+                    <div class="card-title">Server Status</div>
+                </div>
+                <div class="metric">
+                    <span class="status-indicator status-healthy"></span>
+                    Healthy
+                </div>
+                <div class="metric-label">System operational</div>
+                <table class="info-table">
+                    <tr>
+                        <td>Uptime</td>
+                        <td>{{ now | dateModify "-72h" | date "2006-01-02 15:04:05" }}</td>
+                    </tr>
+                    <tr>
+                        <td>Version</td>
+                        <td>1.0.0</td>
+                    </tr>
+                    <tr>
+                        <td>Instance</td>
+                        <td>mockingjay-{{ randAlphaNum 8 | lower }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #36d1dc, #5b86e5); color: white;">
+                        📊
+                    </div>
+                    <div class="card-title">Requests</div>
+                </div>
+                <div class="metric">{{ randInt 1000 9999 }}</div>
+                <div class="metric-label">Total requests today</div>
+                <table class="info-table">
+                    <tr>
+                        <td>Success Rate</td>
+                        <td>{{ randInt 95 100 }}%</td>
+                    </tr>
+                    <tr>
+                        <td>Avg Response</td>
+                        <td>{{ randInt 10 50 }}ms</td>
+                    </tr>
+                    <tr>
+                        <td>Active Routes</td>
+                        <td>{{ randInt 15 25 }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #ff9a9e, #fecfef); color: white;">
+                        💾
+                    </div>
+                    <div class="card-title">Resources</div>
+                </div>
+                <div class="metric">{{ randInt 50 150 }}MB</div>
+                <div class="metric-label">Memory usage</div>
+                <table class="info-table">
+                    <tr>
+                        <td>CPU Usage</td>
+                        <td>{{ randInt 5 25 }}%</td>
+                    </tr>
+                    <tr>
+                        <td>Connections</td>
+                        <td>{{ randInt 10 100 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Goroutines</td>
+                        <td>{{ randInt 50 200 }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon" style="background: linear-gradient(135deg, #a8edea, #fed6e3); color: #333;">
+                        🌐
+                    </div>
+                    <div class="card-title">Request Info</div>
+                </div>
+                <div class="metric-label">Current Request</div>
+                <table class="info-table">
+                    <tr>
+                        <td>Method</td>
+                        <td>{{ .Request.Method }}</td>
+                    </tr>
+                    <tr>
+                        <td>Path</td>
+                        <td>{{ .Request.URL.Path }}</td>
+                    </tr>
+                    <tr>
+                        <td>User Agent</td>
+                        <td>{{ .Headers.User-Agent | trunc 30 }}...</td>
+                    </tr>
+                    <tr>
+                        <td>Time</td>
+                        <td>{{ now | date "15:04:05" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="endpoints">
+            <h3>🔗 Available Endpoints</h3>
+
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <span class="endpoint-path">/dashboard</span>
+                <span class="endpoint-status">
+                    <span class="status-indicator status-healthy"></span>
+                    Active
+                </span>
+            </div>
+
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <span class="endpoint-path">/health</span>
+                <span class="endpoint-status">
+                    <span class="status-indicator status-healthy"></span>
+                    Active
+                </span>
+            </div>
+
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <span class="endpoint-path">/users/{id}</span>
+                <span class="endpoint-status">
+                    <span class="status-indicator status-healthy"></span>
+                    Active
+                </span>
+            </div>
+
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <span class="endpoint-path">/users</span>
+                <span class="endpoint-status">
+                    <span class="status-indicator status-healthy"></span>
+                    Active
+                </span>
+            </div>
+
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <span class="endpoint-path">/api/secure</span>
+                <span class="endpoint-status">
+                    <span class="status-indicator status-warning"></span>
+                    Auth Required
+                </span>
+            </div>
+
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <span class="endpoint-path">/webhook</span>
+                <span class="endpoint-status">
+                    <span class="status-indicator status-healthy"></span>
+                    Active
+                </span>
+            </div>
+        </div>
+
+        <div class="timestamp">
+            Dashboard generated at {{ now | date "2006-01-02 15:04:05 UTC" }}
+            <br>
+            Request processed in {{ randInt 5 25 }}ms
+        </div>
+    </div>
+</body>
+</html>

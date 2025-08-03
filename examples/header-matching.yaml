@@ -1,0 +1,163 @@
+# Header Matching Examples
+# Demonstrates various header matching patterns and authentication scenarios
+
+routes:
+  # Exact header match
+  - path: "/api/v1/data"
+    matchHeaders:
+      Authorization: "Bearer secret123"
+    template: |
+      {
+        "message": "Access granted with exact token match",
+        "data": ["item1", "item2", "item3"],
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Regex header match - Bearer token pattern
+  - path: "/api/v1/secure"
+    matchHeaders:
+      Authorization: "/Bearer [A-Za-z0-9._-]+/"
+    template: |
+      {
+        "message": "Access granted with valid Bearer token",
+        "token_info": {
+          "token": "{{ trimPrefix "Bearer " .Headers.Authorization }}",
+          "length": {{ len (trimPrefix "Bearer " .Headers.Authorization) }}
+        },
+        "user": "authenticated_user"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      X-Token-Used: "{{ .Headers.Authorization }}"
+
+  # Multiple header requirements
+  - path: "/api/v2/admin"
+    matchHeaders:
+      Authorization: "/Bearer .+/"
+      X-API-Key: "/[0-9a-f]{32}/"
+      Content-Type: "application/json"
+    template: |
+      {
+        "message": "Admin access granted",
+        "permissions": ["read", "write", "delete"],
+        "session": {
+          "api_key": "{{ .Headers.X-API-Key }}",
+          "auth_method": "bearer_token"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # API version routing via headers
+  - path: "/api/data"
+    matchHeaders:
+      Accept: "/application\\/vnd\\.api\\+json;version=1/"
+    template: |
+      {
+        "version": 1,
+        "data": {
+          "legacy_format": true,
+          "items": ["old_item1", "old_item2"]
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/vnd.api+json;version=1"
+
+  - path: "/api/data"
+    matchHeaders:
+      Accept: "/application\\/vnd\\.api\\+json;version=2/"
+    template: |
+      {
+        "version": 2,
+        "data": {
+          "items": [
+            {"id": 1, "name": "item1", "created": "{{ now | dateModify "-24h" | date "2006-01-02" }}"},
+            {"id": 2, "name": "item2", "created": "{{ now | date "2006-01-02" }}"}
+          ]
+        },
+        "meta": {
+          "total": 2,
+          "format": "enhanced"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/vnd.api+json;version=2"
+
+  # User-Agent based routing
+  - path: "/api/client-info"
+    matchHeaders:
+      User-Agent: "/Mobile/"
+    template: |
+      {
+        "client_type": "mobile",
+        "optimized_response": true,
+        "user_agent": "{{ .Headers.User-Agent }}",
+        "recommendations": ["use_app", "enable_push_notifications"]
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  - path: "/api/client-info"
+    matchHeaders:
+      User-Agent: "/curl/"
+    template: |
+      {
+        "client_type": "cli_tool",
+        "user_agent": "{{ .Headers.User-Agent }}",
+        "documentation": "https://api.example.com/docs",
+        "endpoints": ["/health", "/users", "/data"]
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Fallback for unmatched headers
+  - path: "/api/client-info"
+    template: |
+      {
+        "client_type": "web",
+        "user_agent": "{{ .Headers.User-Agent }}",
+        "message": "Standard web client detected"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Content-Type routing
+  - path: "/api/upload"
+    verb: "POST"
+    matchHeaders:
+      Content-Type: "/multipart\\/form-data/"
+    template: |
+      {
+        "message": "File upload endpoint",
+        "content_type": "{{ .Headers.Content-Type }}",
+        "processing": "multipart_form_data"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  - path: "/api/upload"
+    verb: "POST"
+    matchHeaders:
+      Content-Type: "application/json"
+    template: |
+      {
+        "message": "JSON data received",
+        "data": {{ .Body | toJson }},
+        "processing": "json_payload"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Unauthorized access (no matching headers)
+  - path: "/api/v1/data"
+    template: |
+      {
+        "error": "Unauthorized",
+        "message": "Valid Authorization header required",
+        "required_format": "Authorization: Bearer <token>"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+      WWW-Authenticate: "Bearer"

@@ -1,0 +1,153 @@
+# Basic Authentication Middleware Example - basic-auth.yaml
+#
+# This example demonstrates how to configure basic authentication middleware
+# with flexible path matching using literal paths and regex patterns.
+#
+# Usage:
+#   mockingjay -config examples/basic-auth.yaml
+#
+# Test scenarios:
+#   # Access public endpoint (no auth required)
+#   curl http://localhost:8080/public
+#
+#   # Access admin endpoint without auth (should get 401)
+#   curl http://localhost:8080/admin
+#
+#   # Access admin endpoint with correct credentials
+#   curl -u admin:secret123 http://localhost:8080/admin
+#
+#   # Access API endpoint with auth
+#   curl -u admin:secret123 http://localhost:8080/api/v1/users
+#
+#   # Access health check (excluded from auth)
+#   curl http://localhost:8080/admin/health
+
+middleware:
+  enabled:
+    # Basic Authentication middleware
+    - type: "basicauth"
+      config:
+        username: "admin"
+        password: "secret123"
+        realm: "Mockingjay Admin Area"
+        paths:
+          # Paths that require authentication
+          include:
+            - "/admin" # Literal path
+            - "/^/api/v\\d+/.*$/" # Regex: API versioned endpoints
+            - "/^/secure/.*$/" # Regex: All secure paths
+
+          # Paths to exclude from authentication (higher priority than include)
+          exclude:
+            - "/admin/health" # Health check doesn't need auth
+            - "/api/v1/public" # Public API endpoint
+
+    # Request logging to see auth attempts
+    - type: "logger"
+      config:
+        format: "text"
+        level: "info"
+
+routes:
+  # Public endpoint - no authentication required
+  - path: "/public"
+    verb: "GET"
+    template: |
+      {
+        "message": "Public endpoint - no authentication required",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "user": "anonymous"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Admin endpoint - requires basic auth
+  - path: "/admin"
+    verb: "GET"
+    template: |
+      {
+        "message": "Admin dashboard - authentication required",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "user": "admin",
+        "data": {
+          "users_count": {{ randInt 100 1000 }},
+          "active_sessions": {{ randInt 10 50 }},
+          "system_status": "operational"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Admin health check - excluded from auth
+  - path: "/admin/health"
+    verb: "GET"
+    template: |
+      {
+        "status": "healthy",
+        "service": "admin-service",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # API endpoints - match regex patterns
+  - path: "/^/api/v(?P<version>\\d+)/users$/"
+    verb: "GET"
+    template: |
+      {
+        "message": "API v{{ .Params.version }} Users endpoint",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "version": "{{ .Params.version }}",
+        "users": [
+          {
+            "id": {{ randInt 1 100 }},
+            "name": "User {{ randInt 1 100 }}",
+            "email": "user{{ randInt 1 100 }}@example.com"
+          }
+        ]
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Public API endpoint - excluded from auth
+  - path: "/api/v1/public"
+    verb: "GET"
+    template: |
+      {
+        "message": "Public API endpoint - no auth required",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "data": {
+          "version": "1.0",
+          "status": "public"
+        }
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Secure area - matches regex pattern
+  - path: "/^/secure/(?P<resource>[^/]+)$/"
+    verb: "GET"
+    template: |
+      {
+        "message": "Secure resource access",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "resource": "{{ .Params.resource }}",
+        "authenticated": true,
+        "permissions": ["read", "admin"]
+      }
+    responseHeaders:
+      Content-Type: "application/json"
+
+  # Protected POST endpoint
+  - path: "/admin/users"
+    verb: "POST"
+    template: |
+      {
+        "message": "User created successfully",
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "created_user": {{ .Body | toPrettyJson }},
+        "id": "{{ randUUID }}",
+        "created_by": "admin"
+      }
+    responseHeaders:
+      Content-Type: "application/json"

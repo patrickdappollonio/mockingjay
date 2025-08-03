@@ -1,0 +1,19 @@
+routes:
+  - path: "/healthz"
+    verb: "GET"
+    template: |
+      OK - Server is healthy
+
+  - path: "/^/user/(?P<name>[^/]+)$/"
+    verb: "GET"
+    template: |
+      Hello, {{ .Params.name }}!
+      Your request headers:
+      {{- range $key, $value := .Headers }}
+      {{ $key }}: {{ $value }}
+      {{- end }}
+
+  - path: "/api/echo"
+    verb: "POST"
+    template: |
+      Received JSON: {{ .Body }}

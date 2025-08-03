@@ -1,0 +1,54 @@
+{
+  "status": "success",
+  "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+  "request_id": "{{ uuidv4 }}",
+  "method": "{{ .Request.Method }}",
+  "path": "{{ .Request.URL.Path }}",
+  "data": {
+    {{- if .Params }}
+    "url_parameters": {
+      {{- range $key, $value := .Params }}
+      "{{ $key }}": "{{ $value }}"{{ if not (last $.Params) }},{{ end }}
+      {{- end }}
+    },
+    {{- end }}
+    {{- if .Query }}
+    "query_parameters": {
+      {{- range $key, $value := .Query }}
+      "{{ $key }}": "{{ $value }}"{{ if not (last $.Query) }},{{ end }}
+      {{- end }}
+    },
+    {{- end }}
+    {{- if .Body }}
+    "request_body": {{ .Body | toJson }},
+    {{- end }}
+    "headers": {
+      "user_agent": "{{ .Headers.User-Agent }}",
+      "content_type": "{{ .Headers.Content-Type }}",
+      "authorization": {{ if .Headers.Authorization }}"present"{{ else }}"not_provided"{{ end }},
+      "custom_headers": {
+        {{- range $key, $value := .Headers }}
+        {{- if and (ne $key "User-Agent") (ne $key "Content-Type") (ne $key "Authorization") }}
+        "{{ $key | lower }}": "{{ $value }}"{{ if not (last $.Headers) }},{{ end }}
+        {{- end }}
+        {{- end }}
+      }
+    },
+    "server_info": {
+      "processing_time": "{{ randInt 5 50 }}ms",
+      "server_instance": "mockingjay-{{ randAlphaNum 8 | lower }}",
+      "version": "1.0.0",
+      "environment": "{{ .Query.env | default "production" }}"
+    }
+  },
+  "meta": {
+    "response_generated_at": "{{ now | unixEpoch }}",
+    "template_used": "api-response.json",
+    "cache_control": "no-cache",
+    "rate_limit": {
+      "remaining": {{ randInt 90 100 }},
+      "reset_at": {{ now | dateModify "+1h" | unixEpoch }},
+      "limit": 100
+    }
+  }
+}

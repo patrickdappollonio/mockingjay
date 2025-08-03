@@ -1,0 +1,47 @@
+# Example configuration demonstrating timeout handling features
+#
+# Server-level timeouts control connection behavior and enforce hard limits
+# Timeout middleware monitors request duration and logs warnings for slow requests
+#
+# To test timeout monitoring:
+# 1. Start the server: mockingjay -config examples/custom-timeouts.yaml
+# 2. Make requests to see different timeout behaviors
+# 3. Check logs for timeout warnings when requests exceed 30 seconds
+server:
+  timeouts:
+    read: "10s" # Maximum time to read entire request body
+    write: "20s" # Maximum time to write response (useful for large responses)
+    idle: "120s" # Keep-alive timeout between requests
+    read_header: "3s" # Maximum time to read request headers
+    request: "60s" # Server-level request monitoring (used by health checks)
+    shutdown: "45s" # Time to wait for graceful shutdown
+
+routes:
+  - path: "/quick"
+    verb: GET
+    template: |
+      Quick response endpoint
+
+  - path: "/upload"
+    verb: POST
+    template: |
+      File upload endpoint - has extended timeout configured
+      Received {{ len .Body }} bytes
+
+  - path: "/streaming"
+    verb: GET
+    template: |
+      Streaming endpoint that may take time to generate response...
+
+middleware:
+  enabled:
+    # Monitor request duration and log warnings for slow requests
+    - type: "timeout"
+      config:
+        duration: "30s" # Log warning if any request takes longer than 30 seconds
+
+    # Enable logging to see timeout warnings in action
+    - type: "logger"
+      config:
+        format: "text" # Use human-readable log format
+        level: "info" # Include info and warning messages

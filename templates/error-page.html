@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Query.code | default "404" }} - Page Not Found</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .error-container {
+            background: white;
+            border-radius: 16px;
+            padding: 60px 40px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        .error-code {
+            font-size: 8rem;
+            font-weight: 900;
+            color: #ff6b6b;
+            margin: 0;
+            line-height: 1;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+        .error-message {
+            font-size: 2rem;
+            color: #2c3e50;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+        .error-description {
+            color: #7f8c8d;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+        .request-details {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: left;
+        }
+        .request-details h3 {
+            color: #34495e;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        .detail-value {
+            color: #6c757d;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        .suggestions {
+            background: #e8f5e8;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 0 8px 8px 0;
+            text-align: left;
+        }
+        .suggestions h4 {
+            color: #155724;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .suggestions ul {
+            color: #155724;
+            margin: 0;
+            padding-left: 20px;
+        }
+        .suggestions li {
+            margin-bottom: 8px;
+        }
+        .back-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+        .back-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        .timestamp {
+            color: #adb5bd;
+            font-size: 0.9rem;
+            margin-top: 30px;
+            font-family: 'Courier New', monospace;
+        }
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="icon">🔍</div>
+        <h1 class="error-code">{{ .Query.code | default "404" }}</h1>
+        <h2 class="error-message">
+            {{ if eq (.Query.code | default "404") "404" }}
+                Page Not Found
+            {{ else if eq (.Query.code | default "404") "403" }}
+                Access Forbidden
+            {{ else if eq (.Query.code | default "404") "500" }}
+                Internal Server Error
+            {{ else }}
+                Something Went Wrong
+            {{ end }}
+        </h2>
+        <p class="error-description">
+            {{ if eq (.Query.code | default "404") "404" }}
+                The page you're looking for doesn't exist or has been moved to a different location.
+            {{ else if eq (.Query.code | default "404") "403" }}
+                You don't have permission to access this resource. Please check your credentials.
+            {{ else if eq (.Query.code | default "404") "500" }}
+                We're experiencing technical difficulties. Our team has been notified and is working on a fix.
+            {{ else }}
+                An unexpected error occurred while processing your request.
+            {{ end }}
+        </p>
+
+        <div class="request-details">
+            <h3>🔧 Request Details</h3>
+            <div class="detail-item">
+                <span class="detail-label">Request Method:</span>
+                <span class="detail-value">{{ .Request.Method }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Requested Path:</span>
+                <span class="detail-value">{{ .Request.URL.Path }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">User Agent:</span>
+                <span class="detail-value">{{ .Headers.User-Agent | trunc 50 }}...</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Request ID:</span>
+                <span class="detail-value">{{ uuidv4 }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Timestamp:</span>
+                <span class="detail-value">{{ now | date "2006-01-02 15:04:05 UTC" }}</span>
+            </div>
+            {{ if .Headers.Referer }}
+            <div class="detail-item">
+                <span class="detail-label">Referrer:</span>
+                <span class="detail-value">{{ .Headers.Referer | trunc 50 }}...</span>
+            </div>
+            {{ end }}
+        </div>
+
+        <div class="suggestions">
+            <h4>💡 Try These Suggestions</h4>
+            <ul>
+                <li>Check the URL for typos or missing characters</li>
+                <li>Use the navigation menu to find what you're looking for</li>
+                <li>Go back to the <a href="/">homepage</a> and start over</li>
+                {{ if eq (.Query.code | default "404") "403" }}
+                <li>Verify your authentication credentials</li>
+                <li>Contact support if you believe you should have access</li>
+                {{ end }}
+                {{ if eq (.Query.code | default "404") "500" }}
+                <li>Try refreshing the page in a few minutes</li>
+                <li>Contact support if the problem persists</li>
+                {{ end }}
+                <li>Check our <a href="/health">service status</a> page</li>
+            </ul>
+        </div>
+
+        {{ if .Query }}
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin: 0 0 10px 0; color: #495057;">Query Parameters:</h4>
+            {{ range $key, $value := .Query }}
+            <div style="font-family: 'Courier New', monospace; font-size: 0.9rem; color: #6c757d;">
+                {{ $key }}: {{ $value }}
+            </div>
+            {{ end }}
+        </div>
+        {{ end }}
+
+        <a href="javascript:history.back()" class="back-button">← Go Back</a>
+
+        <div class="timestamp">
+            Error page generated at {{ now | date "2006-01-02 15:04:05 UTC" }}
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,39 @@
+# Git files
+.git
+.gitignore
+
+# Documentation
+*.md
+
+# Go files (we use the pre-built binary)
+*.go
+go.mod
+go.sum
+internal/
+pkg/
+
+# Build artifacts (handled by goreleaser)
+dist/
+bin/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*_test.go
+testdata/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Config files that shouldn't be in the image
+config.yaml
