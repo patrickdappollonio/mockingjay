@@ -1,0 +1,148 @@
+# Custom Template Delimiters Example
+#
+# This example demonstrates how to customize template delimiters from the default {{}}
+# to any other delimiter style you prefer, such as ERB-style <% %> or your own custom style.
+#
+# Use cases for custom delimiters:
+# - Integration with existing template systems
+# - Avoiding conflicts with JSON/JavaScript that contains {{}}
+# - Personal preference for different delimiter styles
+# - Working with legacy templates
+
+# Configure custom template delimiters
+template:
+  delimiters:
+    left: "<%" # Left delimiter (default: "{{")
+    right: "%>" # Right delimiter (default: "}}")
+
+routes:
+  # Basic usage with ERB-style delimiters
+  - path: "/hello"
+    method: "GET"
+    template: |
+      Hello, <% .Query.Get "name" %>! 🌍
+      Current time: <% now | date "2006-01-02 15:04:05" %>
+      Your User-Agent: <% .Headers.Get "User-Agent" %>
+
+  # Example showing that {{ }} are now treated as literal text
+  - path: "/mixed-content"
+    method: "GET"
+    template: |
+      {
+        "message": "This JSON with {{ braces }} is literal text",
+        "template_value": "<% .Query.Get "value" %>",
+        "timestamp": "<% now | date "2006-01-02T15:04:05Z07:00" %>"
+      }
+
+  # Regex route with custom delimiters and fake data
+  - path: "/^/user/(?P<id>[^/]+)$/"
+    method: "GET"
+    template: |
+      {
+        "user_id": "<% .Params.id %>",
+        "name": "<% fakeName %>",
+        "email": "<% fakeEmail %>",
+        "company": "<% fakeCompany %>",
+        "address": {
+          "street": "<% fakeStreet %>",
+          "city": "<% fakeCity %>",
+          "state": "<% fakeState %>",
+          "zip": "<% fakeZip %>"
+        },
+        "note": "{{ curly braces }} are now literal text and won't be processed"
+      }
+
+  # Conditional logic with custom delimiters
+  - path: "/api/data"
+    method: "GET"
+    template: |
+      <% if eq (.Query.Get "format") "xml" -%>
+      <?xml version="1.0" encoding="UTF-8"?>
+      <response>
+        <message>XML format requested</message>
+        <timestamp><% now | date "2006-01-02T15:04:05Z07:00" %></timestamp>
+      </response>
+      <% else -%>
+      {
+        "message": "JSON format (default)",
+        "timestamp": "<% now | date "2006-01-02T15:04:05Z07:00" %>",
+        "note": "Regular JSON {{ syntax }} is preserved as text"
+      }
+      <% end %>
+
+  # Loop example with custom delimiters
+  - path: "/products"
+    method: "GET"
+    template: |
+      {
+        "products": [
+          <% range $i := seq 1 3 -%>
+          <% if gt $i 1 %>,<% end %>
+          {
+            "id": <% $i %>,
+            "name": "<% fakeProductName %>",
+            "price": <% fakePrice 10.0 100.0 %>,
+            "description": "<% fakeProductDescription %>"
+          }
+          <% end -%>
+        ],
+        "note": "{{ standard }} JSON syntax is literal when using custom delimiters"
+      }
+
+  # Custom response headers with custom delimiters
+  - path: "/headers-demo"
+    method: "GET"
+    template: |
+      Custom delimiters example with dynamic headers.
+      Request ID: <% .Headers.Get "X-Request-ID" %>
+      Processing time: <% now | date "15:04:05" %>
+    response_headers:
+      Content-Type: "text/plain"
+      X-Template-Engine: "Mockingjay with custom delimiters"
+      X-Processed-At: '<% now | date "2006-01-02T15:04:05Z07:00" %>'
+      X-Request-Method: "<% .Request.Method %>"
+
+  # Example with JavaScript/JSON that contains {{ }} - now literal
+  - path: "/javascript"
+    method: "GET"
+    template: |
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Custom Delimiters Demo</title>
+      </head>
+      <body>
+        <h1>Welcome <% .Query.Get "name" %>!</h1>
+        <p>Current time: <% now | date "January 2, 2006 at 3:04 PM" %></p>
+
+        <script>
+        // This JavaScript uses {{ }} which are now literal text
+        const config = {
+          apiUrl: "{{ API_URL }}",  // This won't be processed as template
+          user: "{{ USER_NAME }}",  // This won't be processed as template
+          processedValue: "<% .Query.Get "value" %>"  // This WILL be processed
+        };
+        console.log("Config loaded:", config);
+        </script>
+      </body>
+      </html>
+
+# Additional examples with different delimiter styles:
+#
+# Double percent style:
+# template:
+#   delimiters:
+#     left: "<%%"
+#     right: "%%>"
+#
+# Bracket style:
+# template:
+#   delimiters:
+#     left: "[[["
+#     right: "]]]"
+#
+# Simple brackets:
+# template:
+#   delimiters:
+#     left: "<<"
+#     right: ">>"

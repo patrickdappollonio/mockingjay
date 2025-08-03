@@ -1,0 +1,40 @@
+# Binary outputs
+mockingjay
+dist/
+
+# Test coverage files
+coverage.txt
+*.out
+*.prof
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Local configuration files (don't commit secrets)
+.env
+.env.local
+config.local.yaml
+
+# Ignore YAML files in project root only (allow in subfolders)
+/*.yaml
+/*.yml
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib

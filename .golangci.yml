@@ -1,0 +1,76 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: false
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: standard
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - revive
+    - bodyclose
+    - gosec
+
+  settings:
+    revive:
+      confidence: 0.8
+    gosec:
+      excludes:
+        - G404
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+
+  exclusions:
+    # Use preset exclusions for common false positives
+    presets:
+      - std-error-handling
+      - common-false-positives
+
+    rules:
+      # Allow intentional blank identifier assignments for error ignoring
+      - text: "Error return value.*is not checked"
+        source: "^\\s*_, _ ="
+        linters:
+          - errcheck
+
+      # Allow single blank identifier assignments
+      - text: "Error return value.*is not checked"
+        source: "^\\s*_ ="
+        linters:
+          - errcheck
+
+      # Allow ignoring errors on HTTP response writes (common in web handlers)
+      - text: "Error return value of.*Write.*is not checked"
+        linters:
+          - errcheck
+
+      # Allow ignoring recover() return value (common in defer functions)
+      - text: "Error return value is not checked"
+        source: "recover\\(\\)"
+        linters:
+          - errcheck
+
+      # Allow ignoring G104 errors unhandled for common patterns
+      - text: "G104: Errors unhandled"
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/patrickdappollonio/mockingjay

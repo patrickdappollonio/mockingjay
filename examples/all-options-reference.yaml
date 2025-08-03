@@ -1,0 +1,339 @@
+# ==============================================================================
+# Mockingjay Complete Configuration Reference
+# ==============================================================================
+# This file demonstrates ALL available configuration options with their default
+# values and detailed explanations. Use this as a template:
+# 1. Copy this file to your project
+# 2. Remove sections you don't need
+# 3. Modify values as needed
+# 4. Save and run: mockingjay --config your-config.yaml
+# ==============================================================================
+
+# ==============================================================================
+# SERVER CONFIGURATION
+# ==============================================================================
+# Optional: Configure server-level timeouts and behavior
+# If omitted, mockingjay uses sensible defaults for all values
+server:
+  timeouts:
+    # Maximum time to read the entire request body
+    # Default: "15s"
+    read: "15s"
+
+    # Maximum time to write the response
+    # Default: "15s"
+    write: "15s"
+
+    # Maximum time to wait for next request on keep-alive connections
+    # Default: "60s"
+    idle: "60s"
+
+    # Maximum time to read request headers
+    # Default: "5s"
+    read_header: "5s"
+
+    # Server-level request monitoring timeout (for health checks and logging)
+    # Default: "30s"
+    request: "30s"
+
+    # Maximum time to wait for graceful shutdown
+    # Default: "30s"
+    shutdown: "30s"
+
+# ==============================================================================
+# MIDDLEWARE CONFIGURATION
+# ==============================================================================
+# Optional: Configure request/response middleware
+# Middleware is applied in the order defined below
+# If omitted, no middleware is applied
+middleware:
+  enabled:
+    # --------------------------------------------------------------------------
+    # CORS MIDDLEWARE
+    # --------------------------------------------------------------------------
+    # Enable Cross-Origin Resource Sharing support
+    - type: "cors"
+      config:
+        # Origins allowed to make requests
+        # Default: ["*"] (allow all origins)
+        allow_origins:
+          - "*"
+          # - "https://myapp.com"
+          # - "http://localhost:3000"
+
+        # HTTP methods allowed in CORS requests
+        # Default: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        allow_methods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "DELETE"
+          - "OPTIONS"
+
+        # Headers that can be sent by the client
+        # Default: ["Content-Type", "Authorization"]
+        allow_headers:
+          - "Content-Type"
+          - "Authorization"
+          # - "X-API-Key"
+          # - "X-Requested-With"
+
+        # Headers exposed to the client (optional)
+        # Default: [] (no headers exposed)
+        expose_headers:
+          []
+          # - "X-Total-Count"
+          # - "X-Rate-Limit"
+
+        # Allow credentials in CORS requests
+        # Default: false
+        allow_credentials: false
+
+        # How long browsers can cache preflight responses (seconds)
+        # Default: 3600
+        max_age: 3600
+
+    # --------------------------------------------------------------------------
+    # BASIC AUTHENTICATION MIDDLEWARE
+    # --------------------------------------------------------------------------
+    # Enable HTTP Basic Authentication
+    - type: "basicauth"
+      config:
+        # Username for authentication (required)
+        username: "admin"
+
+        # Password for authentication (required)
+        password: "secret123"
+
+        # Authentication realm displayed in browser login prompt
+        # Default: "Restricted Area"
+        realm: "Restricted Area"
+
+        # Path matching configuration (optional)
+        paths:
+          # Paths that require authentication (optional)
+          # If empty, all paths require authentication
+          include:
+            []
+            # - "/admin"              # Literal path
+            # - "/^/api/v\\d+/.*$/"   # Regex pattern
+
+          # Paths to exclude from authentication (optional)
+          # Takes precedence over include patterns
+          exclude:
+            []
+            # - "/health"             # Health check
+            # - "/public"             # Public endpoints
+
+    # --------------------------------------------------------------------------
+    # TIMEOUT MIDDLEWARE
+    # --------------------------------------------------------------------------
+    # Enforce request-level timeouts with cancellation
+    - type: "timeout"
+      config:
+        # Maximum request duration before cancellation
+        # Default: "30s"
+        duration: "30s"
+
+    # --------------------------------------------------------------------------
+    # LOGGER MIDDLEWARE
+    # --------------------------------------------------------------------------
+    # Enhanced request logging
+    - type: "logger"
+      config:
+        # Log format: "text" or "json"
+        # Default: "text"
+        format: "text"
+
+        # Log level: "debug", "info", "warn", "error"
+        # Default: "info"
+        level: "info"
+
+        # Paths to skip from logging (optional)
+        # Default: []
+        skip_paths:
+          []
+          # - "/health"
+          # - "/ping"
+
+# ==============================================================================
+# ROUTES CONFIGURATION
+# ==============================================================================
+# Required: Define your API endpoints
+# Routes are matched in order - put most specific routes first
+routes:
+  # --------------------------------------------------------------------------
+  # LITERAL PATH ROUTE
+  # --------------------------------------------------------------------------
+  # Exact string matching
+  - path: "/api/example"
+
+    # HTTP method to match (optional)
+    # If omitted, matches any HTTP method
+    # Options: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+    method: "GET"
+
+    # Inline template content (use either template OR template_file)
+    template: |
+      {
+        "message": "Hello from mockingjay!",
+        "timestamp": '{{ now | date "2006-01-02T15:04:05Z07:00" }}',
+        "method": "{{ .Request.Method }}",
+        "path": "{{ .Request.URL.Path }}"
+      }
+
+    # Custom response headers (optional)
+    response_headers:
+      Content-Type: "application/json"
+      # X-API-Version: "1.0"
+      # Cache-Control: "max-age=300"
+
+  # --------------------------------------------------------------------------
+  # REGEX PATH ROUTE WITH PARAMETERS
+  # --------------------------------------------------------------------------
+  # Pattern matching with named capture groups
+  - path: "/^/users/(?P<id>\\d+)$/"
+    method: "GET"
+
+    # Required request headers (optional)
+    # All specified headers must match for route to be selected
+    match_headers:
+      # Exact string match
+      # Authorization: "Bearer secret123"
+
+      # Regex pattern match (wrap in /.../)
+      Authorization: "/Bearer .+/"
+      # Content-Type: "/application\\/(json|xml)/"
+
+    template: |
+      {
+        "id": {{ .Params.id }},
+        "name": "User {{ .Params.id }}",
+        "email": "user{{ .Params.id }}@example.com",
+        "created_at": "{{ now | dateModify "-720h" | date "2006-01-02T15:04:05Z07:00" }}"
+      }
+
+    response_headers:
+      Content-Type: "application/json"
+      X-User-ID: "{{ .Params.id }}"
+
+  # --------------------------------------------------------------------------
+  # POST ROUTE WITH JSON BODY
+  # --------------------------------------------------------------------------
+  - path: "/api/users"
+    method: "POST"
+    template: |
+      {
+        "id": {{ randInt 1000 99999 }},
+        "username": "{{ .Body.username }}",
+        "email": "{{ .Body.email }}",
+        "name": '{{ .Body.name | default "Anonymous User" }}',
+        "created_at": '{{ now | date "2006-01-02T15:04:05Z07:00" }}'
+      }
+
+    response_headers:
+      Content-Type: "application/json"
+      Location: "/api/users/{{ randInt 1000 99999 }}"
+
+  # --------------------------------------------------------------------------
+  # EXTERNAL TEMPLATE FILE ROUTE
+  # --------------------------------------------------------------------------
+  # Use external file instead of inline template (example with a simple file)
+  - path: "/dashboard"
+    method: "GET"
+
+    # External template file (use either template OR template_file)
+    # template_file: "./my-custom-template.html"
+
+    # For this example, we'll use an inline template instead
+    template: |
+      <!DOCTYPE html>
+      <html><head><title>Dashboard</title></head>
+      <body>
+        <h1>Dashboard</h1>
+        <p>Request: {{ .Request.Method }} {{ .Request.URL.Path }}</p>
+        <p>Time: {{ now | date "15:04:05" }}</p>
+      </body></html>
+
+    response_headers:
+      Content-Type: "text/html; charset=utf-8"
+      Cache-Control: "max-age=300"
+
+  # --------------------------------------------------------------------------
+  # HEADER-BASED ROUTING
+  # --------------------------------------------------------------------------
+  # Different responses based on request headers
+  - path: "/api/data"
+    method: "GET"
+    match_headers:
+      Accept: "/application\\/vnd\\.api\\+json;version=2/"
+    template: |
+      {
+        "version": 2,
+        "data": "Enhanced API response",
+        "features": ["pagination", "filtering", "sorting"]
+      }
+    response_headers:
+      Content-Type: "application/vnd.api+json;version=2"
+
+  # Fallback for same path with different headers
+  - path: "/api/data"
+    method: "GET"
+    template: |
+      {
+        "version": 1,
+        "data": "Legacy API response"
+      }
+    response_headers:
+      Content-Type: "application/json"
+
+  # --------------------------------------------------------------------------
+  # DYNAMIC RESPONSE HEADERS
+  # --------------------------------------------------------------------------
+  # Headers that use template context
+  - path: "/api/dynamic"
+    method: "GET"
+    template: |
+      {
+        "message": "Dynamic response",
+        "request_id": '{{ .Headers.Get "X-Request-ID" | default "generated" }}'
+      }
+
+    response_headers:
+      Content-Type: "application/json"
+      # Use template syntax in header values
+      X-Request-ID: '{{ .Headers.Get "X-Request-ID" | default (uuidv4) }}'
+      X-User-Agent: '{{ .Headers.Get "User-Agent" }}'
+      X-Timestamp: '{{ now | date "2006-01-02T15:04:05Z07:00" }}'
+
+  # --------------------------------------------------------------------------
+  # HEALTH CHECK ENDPOINT
+  # --------------------------------------------------------------------------
+  - path: "/health"
+    method: "GET"
+    template: |
+      {
+        "status": "healthy",
+        "timestamp": '{{ now | date "2006-01-02T15:04:05Z07:00" }}',
+        "uptime_seconds": {{ randInt 3600 86400 }},
+        "version": "1.0.0"
+      }
+    response_headers:
+      Content-Type: "application/json"
+      Cache-Control: "no-cache"
+
+  # --------------------------------------------------------------------------
+  # CATCH-ALL ROUTE (404 handler)
+  # --------------------------------------------------------------------------
+  # This should be the LAST route as it matches everything
+  - path: "/^.*$/"
+    method: "GET"
+    template: |
+      {
+        "error": "Not Found",
+        "message": "The requested endpoint {{ .Request.URL.Path }} was not found",
+        "code": 404,
+        "timestamp": '{{ now | date "2006-01-02T15:04:05Z07:00" }}'
+      }
+    response_headers:
+      Content-Type: "application/json"

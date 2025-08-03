@@ -1,0 +1,62 @@
+name: Validate Configuration
+
+on:
+  push:
+    paths:
+      - '.goreleaser.yaml'
+      - 'examples/*.yaml'
+      - 'examples/*.yml'
+  pull_request:
+    paths:
+      - '.goreleaser.yaml'
+      - 'examples/*.yaml'
+      - 'examples/*.yml'
+
+jobs:
+  validate-goreleaser:
+    name: Validate GoReleaser Config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          install-only: true
+
+      - name: Validate GoReleaser configuration
+        run: goreleaser check
+
+  validate-examples:
+    name: Validate Example Configs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build mockingjay
+        run: go build -o mockingjay .
+
+      - name: Validate all example configurations
+        run: |
+          for config in examples/*.yaml examples/*.yml; do
+            if [ -f "$config" ]; then
+              echo "Validating $config..."
+              ./mockingjay --validate --config "$config"
+            fi
+          done

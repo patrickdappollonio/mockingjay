@@ -1,0 +1,135 @@
+routes:
+  - path: /fake-person
+    method: GET
+    template: |
+      {
+        "id": "{{ fakeUUID }}",
+        "name": "{{ fakeName }}",
+        "first_name": "{{ fakeFirstName }}",
+        "last_name": "{{ fakeLastName }}",
+        "email": "{{ fakeEmail }}",
+        "phone": "{{ fakePhoneFormatted }}",
+        "gender": "{{ fakeGender }}",
+        "job_title": "{{ fakeJobTitle }}",
+        "company": "{{ fakeCompany }}",
+        "bs": "{{ fakeBS }}",
+        "address": {
+          "street": "{{ fakeStreet }}",
+          "city": "{{ fakeCity }}",
+          "state": "{{ fakeState }}",
+          "zip": "{{ fakeZip }}",
+          "country": "{{ fakeCountry }}"
+        },
+        "financial": {
+          "credit_card": "{{ fakeCreditCardNumber }}",
+          "credit_card_type": "{{ fakeCreditCardType }}",
+          "currency": "{{ fakeCurrency }}",
+          "price": {{ fakePrice 10.0 500.0 }}
+        },
+        "preferences": {
+          "favorite_color": "{{ fakeColor }}",
+          "favorite_animal": "{{ fakeAnimal }}",
+          "hobby": "{{ fakeHobby }}",
+          "favorite_food": "{{ fakeFood }}"
+        },
+        "random_facts": {
+          "flip_coin": "{{ fakeFlipACoin }}",
+          "random_word": "{{ fakeWord }}",
+          "sentence": "{{ fakeSentence 8 }}",
+          "celebrity_actor": "{{ fakeCelebrityActor }}",
+          "book_title": "{{ fakeBookTitle }}",
+          "movie": "{{ fakeMovieName }}",
+          "song": "{{ fakeSong }}"
+        }
+      }
+
+  - path: /fake-products
+    method: GET
+    template: |
+      [
+        {{- range $i := seq 1 5 }}
+        {{- if gt $i 1 }},{{ end }}
+        {
+          "id": "{{ fakeUUID }}",
+          "name": "{{ fakeProductName }}",
+          "description": "{{ fakeProductDescription }}",
+          "category": "{{ fakeProductCategory }}",
+          "material": "{{ fakeProductMaterial }}",
+          "feature": "{{ fakeProductFeature }}",
+          "price": {{ fakePrice 5.99 999.99 }},
+          "color": "{{ fakeHexColor }}",
+          "created_at": "{{ fakePast }}",
+          "url": "{{ fakeURL }}"
+        }
+        {{- end }}
+      ]
+
+  - path: /fake-company
+    method: GET
+    template: |
+      {
+        "name": "{{ fakeCompany }}",
+        "bs": "{{ fakeBS }}",
+        "website": "{{ fakeURL }}",
+        "email": "info@{{ fakeDomainName }}",
+        "phone": "{{ fakePhoneFormatted }}",
+        "address": {
+          "street": "{{ fakeStreet }}",
+          "city": "{{ fakeCity }}",
+          "state": "{{ fakeState }}",
+          "zip": "{{ fakeZip }}",
+          "country": "{{ fakeCountry }}"
+        },
+        "employees": [
+          {{- range $i := seq 1 3 }}
+          {{- if gt $i 1 }},{{ end }}
+          {
+            "id": "{{ fakeUUID }}",
+            "name": "{{ fakeName }}",
+            "email": "{{ fakeEmail }}",
+            "job_title": "{{ fakeJobTitle }}",
+            "department": "{{ fakeJobDescriptor }}",
+            "hire_date": "{{ fakePast }}"
+          }
+          {{- end }}
+        ]
+      }
+
+  - path: /fake-text
+    method: GET
+    template: |
+      {
+        "word": "{{ fakeWord }}",
+        "words": "{{ fakeWords 5 }}",
+        "sentence": "{{ fakeSentence 10 }}",
+        "paragraph": '{{ fakeParagraph 1 3 8 ". " }}',
+        "lorem_ipsum": {
+          "word": "{{ fakeLoremIpsumWord }}",
+          "sentence": "{{ fakeLoremIpsumSentence 12 }}",
+          "paragraph": '{{ fakeLoremIpsumParagraph 1 4 10 ". " }}'
+        },
+        "languages": {
+          "language": "{{ fakeLanguage }}",
+          "language_abbr": "{{ fakeLanguageAbbrv }}",
+          "programming": "{{ fakeProgrammingLanguage }}"
+        }
+      }
+
+  - path: /fake-time
+    method: GET
+    template: |
+      {
+        "current_time": "{{ now }}",
+        "fake_date": "{{ fakeDate }}",
+        "future_date": "{{ fakeFuture }}",
+        "past_date": "{{ fakePast }}",
+        "details": {
+          "weekday": "{{ fakeWeekday }}",
+          "month": {{ fakeMonth }},
+          "month_string": "{{ fakeMonthString }}",
+          "year": {{ fakeYear }},
+          "hour": {{ fakeHour }},
+          "minute": {{ fakeMinute }},
+          "timezone": "{{ fakeTimeZone }}"
+        }
+      }

@@ -1,0 +1,22 @@
+# Git files
+.git
+.gitignore
+
+# Documentation
+*.md
+
+# Go files (we use the pre-built binary)
+*.go
+go.mod
+go.sum
+internal/
+pkg/
+
+# Build artifacts (handled by goreleaser)
+dist/
+bin/
+
+# Temporary files
+*.tmp
+*.temp
+

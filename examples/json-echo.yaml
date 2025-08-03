@@ -1,0 +1,49 @@
+# JSON Echo Service Example
+# Demonstrates JSON body parsing, response headers, and dynamic content
+
+routes:
+  # Echo JSON POST requests
+  - path: "/echo"
+    method: "POST"
+    template: |
+      {
+        "received": {{ .Body | toJson }},
+        "timestamp": "{{ now | date "2006-01-02T15:04:05Z07:00" }}",
+        "method": "{{ .Request.Method }}",
+        "path": "{{ .Request.URL.Path }}",
+        "content_length": {{ .Request.ContentLength }}
+      }
+    response_headers:
+      Content-Type: "application/json"
+      X-Echo-Server: "mockingjay"
+
+  # Echo with query parameters
+  - path: "/echo-query"
+    method: "GET"
+    template: |
+      {
+        "query_params": {
+          {{- range $key, $value := .Query }}
+          "{{ $key }}": "{{ $value }}"{{ if not (last $.Query) }},{{ end }}
+          {{- end }}
+        },
+        "headers": {
+          {{- range $key, $value := .Headers }}
+          "{{ $key }}": "{{ $value }}"{{ if not (last $.Headers) }},{{ end }}
+          {{- end }}
+        }
+      }
+    response_headers:
+      Content-Type: "application/json"
+
+  # JSON formatting example
+  - path: "/format"
+    method: "POST"
+    template: |
+      Original JSON:
+      {{ .Body | toPrettyJson }}
+
+      Minified JSON:
+      {{ .Body | toJson }}
+    response_headers:
+      Content-Type: "text/plain"

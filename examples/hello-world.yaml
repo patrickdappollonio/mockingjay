@@ -1,0 +1,27 @@
+# Simple Hello World Example
+# A minimal configuration to get started with mockingjay
+
+routes:
+  # Basic static route
+  - path: "/hello"
+    method: "GET"
+    template: |
+      Hello, World! 🌍
+      Current time: {{ now | date "2006-01-02 15:04:05" }}
+
+  # Route with URL parameter
+  - path: "/^/hello/(?P<name>[^/]+)$/"
+    method: "GET"
+    template: |
+      Hello, {{ .Params.name | title }}! 👋
+      Nice to meet you!
+
+  # Simple root route
+  - path: "/"
+    method: "GET"
+    template: |
+      Welcome to Mockingjay!
+
+      Try these endpoints:
+      - GET /hello
+      - GET /hello/{your-name}
