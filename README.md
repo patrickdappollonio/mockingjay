@@ -1,6 +1,10 @@
 # Mockingjay
 
-A pluggable HTTP server configurable via YAML that uses Go templates to render dynamic responses based on request data.
+<img src="mockingjay.png" alt="Mockingjay Logo" width="200" height="200" align="right"> A pluggable HTTP server configurable via YAML that uses Go templates to render dynamic responses based on request data.
+
+Mockingjay can create mock endpoints for development and testing easily, by combining route matching, header matching and template rendering.
+
+Free to use and available on [Homebrew](#homebrew-for-macos-and-linux), [Docker](#docker), and [binaries](#binaries).
 
 ## Overview
 
