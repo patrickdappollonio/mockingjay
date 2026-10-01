@@ -602,7 +602,7 @@ func validateStatusTemplate(engine *templatepkg.Engine, route RouteConfig, route
 
 	templateName := fmt.Sprintf("validation_status_%d_%s_%s", routeIndex, route.GetNormalizedMethod(), sanitizeTemplateNameForValidation(route.Path))
 	if _, err := engine.CompileInlineTemplate(templateName, route.Status); err != nil {
-		return fmt.Errorf("route[%d] status template compilation failed: %w", routeIndex, err)
+		return fmt.Errorf("failed to compile status template for route[%d]: %w", routeIndex, err)
 	}
 
 	return nil

@@ -278,7 +278,7 @@ func TestLoadConfig_InvalidFieldCombinations(t *testing.T) {
     method: GET
     status: "{{ if }}"
     template: "test"`,
-			wantErr: "status template compilation failed",
+			wantErr: "failed to compile status template for route[0]",
 		},
 		{
 			name: "negative delay",

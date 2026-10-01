@@ -50,8 +50,7 @@ func NewTemplateContext(req *http.Request, params map[string]string) (*TemplateC
 	}
 
 	if raw, ok := body.(string); ok && isFormContentType(req.Header.Get("Content-Type")) {
-		// ParseQuery keeps every pair it could decode and skips malformed ones.
-		ctx.Form, _ = url.ParseQuery(raw)
+		ctx.Form, _ = url.ParseQuery(raw) //nolint:errcheck // ParseQuery keeps every pair it could decode and skips malformed ones
 	}
 
 	return ctx, nil

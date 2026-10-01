@@ -17,6 +17,8 @@ import (
 )
 
 func TestIsConfigChange(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		configFile string
@@ -34,6 +36,7 @@ func TestIsConfigChange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := isConfigChange(tt.event, tt.configFile); got != tt.want {
 				t.Errorf("isConfigChange(%v, %q) = %v, want %v", tt.event, tt.configFile, got, tt.want)
 			}

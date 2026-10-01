@@ -112,10 +112,10 @@ func TestTimeoutMiddleware_HandlerOutput(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	t.Run("completed response is passed through", func(t *testing.T) {
-		var sawWrapper bool
+		var handlerWriter http.ResponseWriter
 		handler := NewChain(NewTimeoutMiddleware(TimeoutConfig{Duration: time.Second}, logger)).
 			Then(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, sawWrapper = w.(*ResponseWriter)
+				handlerWriter = w
 				w.Header().Set("X-Test", "yes")
 				w.WriteHeader(http.StatusCreated)
 				fmt.Fprint(w, "created")
@@ -133,8 +133,8 @@ func TestTimeoutMiddleware_HandlerOutput(t *testing.T) {
 		if got := rec.Body.String(); got != "created" {
 			t.Errorf("body = %q, want %q", got, "created")
 		}
-		if !sawWrapper {
-			t.Errorf("handler after the timeout middleware got %T, want *ResponseWriter so the logger can read the status", sawWrapper)
+		if _, ok := handlerWriter.(*ResponseWriter); !ok {
+			t.Errorf("handler after the timeout middleware got %T, want *ResponseWriter so the logger can read the status", handlerWriter)
 		}
 	})
 
