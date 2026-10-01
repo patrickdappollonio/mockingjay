@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"runtime"
@@ -275,7 +276,7 @@ func (s *Server) findMatchingRoute(r *http.Request) *router.RouteMatch {
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
-	fmt.Fprintf(w, "404 Not Found: no route matches %s %s", r.Method, r.URL.Path)
+	fmt.Fprintf(w, "404 Not Found: no route matches %s %s", html.EscapeString(r.Method), html.EscapeString(r.URL.Path))
 }
 
 // handleServerError handles 500 errors
