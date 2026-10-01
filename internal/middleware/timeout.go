@@ -51,7 +51,7 @@ func (m *TimeoutMiddleware) Handler() func(http.Handler) http.Handler {
 			// Replace the request context with our timeout context
 			r = r.WithContext(ctx)
 
-			// The handler writes to tw; only this goroutine writes to w
+			// The handler's output is buffered; only this goroutine writes to the client
 			tw := &timeoutWriter{header: make(http.Header)}
 			done := make(chan struct{}, 1)
 
@@ -143,6 +143,6 @@ func (tw *timeoutWriter) expire() {
 func (tw *timeoutWriter) writeTo(w http.ResponseWriter) {
 	maps.Copy(w.Header(), tw.header)
 	w.WriteHeader(cmp.Or(tw.status, http.StatusOK))
-	// A write error means the client went away; there is no one left to tell.
+	// The status is already sent, so a failed write (client gone, or a body on a 204) has nowhere to go.
 	_, _ = w.Write(tw.body.Bytes())
 }

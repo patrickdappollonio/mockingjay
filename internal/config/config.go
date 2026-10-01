@@ -91,21 +91,22 @@ func (dc *DelimiterConfig) GetWithDefaults() DelimiterConfig {
 	return config
 }
 
-// RouteConfig represents a single route configuration from YAML
+// RouteConfig represents a single route configuration from YAML.
+// An empty Method matches any method; Status is a status code or a template
+// that renders one, and an empty Status means 200.
 type RouteConfig struct {
 	Path            string            `yaml:"path"`
-	Method          string            `yaml:"method,omitempty"` // empty matches any method
-	Status          string            `yaml:"status,omitempty"` // a status code or a template rendering one; empty means 200
-	Delay           time.Duration     `yaml:"delay,omitempty"`  // wait before responding
+	Method          string            `yaml:"method,omitempty"`
+	Status          string            `yaml:"status,omitempty"`
+	Delay           time.Duration     `yaml:"delay,omitempty"`
 	Template        string            `yaml:"template,omitempty"`
 	TemplateFile    string            `yaml:"template_file,omitempty"`
 	MatchHeaders    map[string]string `yaml:"match_headers,omitempty"`
 	ResponseHeaders map[string]string `yaml:"response_headers,omitempty"`
 }
 
-// IsValidStatusCode reports whether code can be sent as a route's final status.
-// Informational 1xx codes are excluded: net/http sends them as interim
-// responses and follows them with an implicit 200.
+// IsValidStatusCode reports whether code can be a route's final status; 1xx codes
+// cannot, because net/http sends them as interim responses.
 func IsValidStatusCode(code int) bool {
 	return code >= 200 && code <= 599
 }
