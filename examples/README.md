@@ -6,7 +6,7 @@ This directory contains carefully curated examples showcasing different aspects 
 
 Run any example with:
 ```bash
-mockingjay -config examples/{example-name}.yaml
+mockingjay --config examples/{example-name}.yaml
 ```
 
 ## Example Categories
@@ -95,7 +95,7 @@ routes:
 Run the following command to start the server, replacing `/path/to/config.yaml` with the path to the configuration file you saved above.
 
 ```bash
-mockingjay -config /path/to/config.yaml
+mockingjay --config /path/to/config.yaml
 ```
 
 ### 2. Header-based Routing

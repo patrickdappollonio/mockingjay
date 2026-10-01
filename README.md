@@ -12,7 +12,7 @@ Mockingjay is a lightweight, flexible HTTP server designed for:
 - **API mocking and prototyping**: Quickly create mock endpoints for development and testing
 - **Dynamic response generation**: Use Go templates with rich context data from incoming requests
 - **Configuration-driven routing**: Define routes, headers, and responses in simple YAML files
-- **Template-based responses**: Leverage the power of Go's `html/template` with 100+ helper functions
+- **Template-based responses**: Leverage the power of Go's `text/template` with 100+ helper functions
 
 ### Key Features
 
@@ -185,11 +185,14 @@ $ mockingjay --validate --config examples/hello-world.yaml
 **Failed Validation:**
 ```bash
 $ mockingjay --validate --config broken-config.yaml
-❌ Configuration validation failed:
-   route[0] template compilation failed: template compilation error in inline:
-   failed to parse template: template: validation_route_0_GET_test:1:
-   function "invalidFunction" not defined
+level=ERROR msg="failed to load configuration" file=broken-config.yaml
+  error="failed to load config from \"broken-config.yaml\": configuration validation failed:
+  template validation failed: route[0] template compilation failed: template compilation
+  error in inline: failed to parse template: template: validation_route_0_GET_test:1:
+  function \"invalidFunction\" not defined"
 ```
+
+The command exits with a non-zero status when validation fails.
 
 ## Configuration Reference
 
@@ -529,7 +532,7 @@ middleware:
 The timeout middleware provides **request-level timeout enforcement**:
 
 1. **Context Cancellation**: Creates a timeout context for each request
-2. **Template Buffering**: Templates are rendered to a buffer with timeout protection
+2. **Response Buffering**: The route's response is held in memory until it is complete, then sent
 3. **Request Termination**: Returns `408 Request Timeout` if the timeout is exceeded
 4. **Immediate Response**: Clients receive timeout response without waiting for completion
 5. **Structured Logging**: Logs timeout events with detailed timing information
@@ -606,16 +609,19 @@ $ curl -i http://localhost:8080/slow
 HTTP/1.1 408 Request Timeout
 Content-Type: text/plain; charset=utf-8
 Date: Mon, 04 Aug 2025 02:36:07 GMT
-Content-Length: 121
+Content-Length: 65
 
 408 Request Timeout
 
-The request exceeded the configured timeout and was terminated.
-Timeout occurred after: 201ms
+The request exceeded the configured timeout.
 ```
+
+A route that is still running when the timeout fires can no longer write to the response; anything it produces afterwards is discarded.
 
 **Server Logs:**
 ```
+level=WARN msg="request timeout" path=/slow method=GET timeout=200ms
+  remote_addr=[::1]:64377
 level=WARN msg="request timeout - terminating" method=GET path=/slow
   duration=201.089958ms timeout="context cancelled" remote_addr=[::1]:64377
 level=INFO msg="request processed" method=GET path=/slow status=408
@@ -816,13 +822,13 @@ curl http://localhost:8080/health
 
 The health check endpoint:
 - **Always available** regardless of configuration
-- **GET requests only** (other methods return 404)
+- **GET requests only**: other methods on `/health` go through your routes like any other path, and get a 404 if none match
 - **Thread-safe** during config reloads
 - **JSON response** with server information
 
 ## Template Syntax
 
-Mockingjay uses Go's [`html/template`](https://pkg.go.dev/html/template) engine with automatic HTML escaping.
+Mockingjay uses Go's [`text/template`](https://pkg.go.dev/text/template) engine. Output is not HTML-escaped, so escape request data yourself (for example with `html`) when a template renders HTML.
 
 ### Template Performance
 
