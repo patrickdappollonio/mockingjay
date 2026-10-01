@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/patrickdappollonio/mockingjay/internal/config"
+	templatepkg "github.com/patrickdappollonio/mockingjay/internal/template"
 )
 
 // TestServer represents a test server instance with utilities for integration testing
@@ -726,6 +728,7 @@ func TestServer_Integration_Delay(t *testing.T) {
 	cfg := createTestConfig([]config.RouteConfig{
 		{Path: "/slow", Method: "GET", Delay: 150 * time.Millisecond, Template: "slow"},
 		{Path: "/very-slow", Method: "GET", Delay: 10 * time.Second, Template: "never sent"},
+		{Path: "/slow-template", Method: "GET", Template: `{{ sleep "10s" }}never sent`},
 	})
 	ts := NewTestServer(t, cfg)
 
@@ -746,23 +749,28 @@ func TestServer_Integration_Delay(t *testing.T) {
 		}
 	})
 
-	t.Run("cancelled request stops waiting", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-		defer cancel()
-		req := httptest.NewRequest("GET", "/very-slow", nil).WithContext(ctx)
-		rec := httptest.NewRecorder()
+	for _, path := range []string{"/very-slow", "/slow-template"} {
+		t.Run("cancelled request stops waiting on "+path, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+			defer cancel()
+			req := httptest.NewRequest("GET", path, nil).WithContext(ctx)
+			rec := httptest.NewRecorder()
 
-		start := time.Now()
-		ts.Server.ServeHTTP(rec, req)
-		elapsed := time.Since(start)
+			start := time.Now()
+			ts.Server.ServeHTTP(rec, req)
+			elapsed := time.Since(start)
 
-		if rec.Code != http.StatusRequestTimeout {
-			t.Errorf("GET /very-slow with 50ms deadline status = %d, want 408", rec.Code)
-		}
-		if elapsed > 2*time.Second {
-			t.Errorf("GET /very-slow with 50ms deadline took %s, want it to stop at the deadline", elapsed)
-		}
-	})
+			if rec.Code != http.StatusRequestTimeout {
+				t.Errorf("GET %s with 50ms deadline status = %d, want 408", path, rec.Code)
+			}
+			if !strings.HasPrefix(rec.Body.String(), "408 Request Timeout") {
+				t.Errorf("GET %s with 50ms deadline body = %q, want the 408 message", path, rec.Body.String())
+			}
+			if elapsed > 2*time.Second {
+				t.Errorf("GET %s with 50ms deadline took %s, want it to stop at the deadline", path, elapsed)
+			}
+		})
+	}
 }
 
 func TestServer_ReloadIsNotBlockedByDelayedRequest(t *testing.T) {
@@ -843,5 +851,60 @@ func TestServer_HealthCheckReportsVersion(t *testing.T) {
 	}
 	if health.Version != "test-version" {
 		t.Errorf("GET /health version = %q, want %q", health.Version, "test-version")
+	}
+}
+
+func TestRenderBody(t *testing.T) {
+	engine := templatepkg.NewEngine()
+	data := &templatepkg.TemplateContext{Params: map[string]string{"name": "alice"}}
+
+	tests := []struct {
+		name        string
+		source      string
+		deadline    time.Duration
+		wantBody    string
+		wantErr     error
+		wantAnyErr  bool
+		maxDuration time.Duration
+	}{
+		{name: "renders the template", source: "hello {{ .Params.name }}", deadline: time.Second, wantBody: "hello alice"},
+		{name: "template error is returned", source: "{{ .Params.name.Missing }}", deadline: time.Second, wantAnyErr: true},
+		{name: "deadline ends the wait", source: `{{ sleep "10s" }}late`, deadline: 50 * time.Millisecond, wantErr: context.DeadlineExceeded, maxDuration: 2 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := engine.CompileInlineTemplate("render_body_test", tt.source)
+			if err != nil {
+				t.Fatalf("CompileInlineTemplate(%q) returned unexpected error: %v", tt.source, err)
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), tt.deadline)
+			defer cancel()
+
+			start := time.Now()
+			body, err := renderBody(ctx, engine, tmpl, data)
+			elapsed := time.Since(start)
+
+			switch {
+			case tt.wantErr != nil:
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("renderBody(%q) error = %v, want %v", tt.source, err, tt.wantErr)
+				}
+			case tt.wantAnyErr:
+				if err == nil {
+					t.Errorf("renderBody(%q) error = nil, want an error", tt.source)
+				}
+			default:
+				if err != nil {
+					t.Fatalf("renderBody(%q) returned unexpected error: %v", tt.source, err)
+				}
+				if string(body) != tt.wantBody {
+					t.Errorf("renderBody(%q) = %q, want %q", tt.source, body, tt.wantBody)
+				}
+			}
+			if tt.maxDuration > 0 && elapsed > tt.maxDuration {
+				t.Errorf("renderBody(%q) took %s, want under %s", tt.source, elapsed, tt.maxDuration)
+			}
+		})
 	}
 }

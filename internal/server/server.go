@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/patrickdappollonio/mockingjay/internal/config"
@@ -133,47 +134,30 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Execute template with timeout protection
-	// We use a buffered approach with goroutine to allow template execution cancellation
-	var templateBuffer bytes.Buffer
-	templateDone := make(chan error, 1)
 	templateStart := time.Now()
-
-	go func() {
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				templateDone <- fmt.Errorf("template execution panicked: %v", recovered)
-			}
-		}()
-		templateDone <- engine.ExecuteTemplate(routeMatch.Route.Tmpl, &templateBuffer, ctx)
-	}()
-
-	// Wait for template completion or context timeout
-	select {
-	case err = <-templateDone:
-		if err != nil {
-			s.handleTemplateError(w, r, err)
-			s.logRequest(r, 500, time.Since(start), routeMatch.Route)
+	body, err := renderBody(r.Context(), engine, routeMatch.Route.Tmpl, ctx)
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.handleTimeout(w, r, start, routeMatch.Route)
 			return
 		}
+		s.handleTemplateError(w, r, err)
+		s.logRequest(r, 500, time.Since(start), routeMatch.Route)
+		return
+	}
 
-		// Log template execution time for performance analysis
-		templateDuration := time.Since(templateStart)
-		s.logger.Info("template execution completed",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"template_duration", templateDuration,
-			"buffer_size", templateBuffer.Len(),
-			"remote_addr", r.RemoteAddr,
-		)
+	// Log template execution time for performance analysis
+	s.logger.Info("template execution completed",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"template_duration", time.Since(templateStart),
+		"buffer_size", len(body),
+		"remote_addr", r.RemoteAddr,
+	)
 
-		w.WriteHeader(status)
-		if !bodyAllowedForStatus(status) {
-			break
-		}
-
-		_, err = w.Write(templateBuffer.Bytes())
-		if err != nil {
+	w.WriteHeader(status)
+	if bodyAllowedForStatus(status) {
+		if _, err := w.Write(body); err != nil {
 			// Log write error, but don't try to send another response as headers are already sent
 			s.logger.Error("failed to write template response",
 				"method", r.Method,
@@ -184,18 +168,35 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.logRequest(r, 500, time.Since(start), routeMatch.Route)
 			return
 		}
-
-	case <-r.Context().Done():
-		s.handleTimeout(w, r, start, routeMatch.Route)
-
-		// Don't wait for template completion - let it finish in background
-		go func() {
-			<-templateDone // Consume the channel to prevent goroutine leak
-		}()
-		return
 	}
 
 	s.logRequest(r, status, time.Since(start), routeMatch.Route)
+}
+
+// renderBody executes tmpl and returns ctx's error if ctx ends first; the
+// template then finishes in the background and its output is discarded.
+func renderBody(ctx context.Context, engine *templatepkg.Engine, tmpl *template.Template, data *templatepkg.TemplateContext) ([]byte, error) {
+	var buf bytes.Buffer
+	done := make(chan error, 1)
+
+	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				done <- fmt.Errorf("template execution panicked: %v", recovered)
+			}
+		}()
+		done <- engine.ExecuteTemplate(tmpl, &buf, data)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // renderStatus returns the route's status code, rendering its status template when it has one.
