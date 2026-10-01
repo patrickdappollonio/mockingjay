@@ -19,6 +19,9 @@ type TemplateContext struct {
 	// Query contains all query parameters with full access to url.Values methods
 	Query url.Values `json:"query"`
 
+	// Form contains the fields of an application/x-www-form-urlencoded body; empty otherwise
+	Form url.Values `json:"form"`
+
 	// Body contains the parsed request body (JSON if applicable, string otherwise)
 	Body interface{} `json:"body"`
 
@@ -32,6 +35,7 @@ func NewTemplateContext(req *http.Request, params map[string]string) (*TemplateC
 		Request: req,
 		Headers: req.Header,
 		Query:   req.URL.Query(),
+		Form:    url.Values{},
 		Params:  params,
 	}
 
@@ -43,6 +47,11 @@ func NewTemplateContext(req *http.Request, params map[string]string) (*TemplateC
 		ctx.Body = err.Error()
 	} else {
 		ctx.Body = body
+	}
+
+	if raw, ok := body.(string); ok && isFormContentType(req.Header.Get("Content-Type")) {
+		// ParseQuery keeps every pair it could decode and skips malformed ones.
+		ctx.Form, _ = url.ParseQuery(raw)
 	}
 
 	return ctx, nil
@@ -88,6 +97,12 @@ func parseRequestBody(req *http.Request) (interface{}, error) {
 
 	// Return as string for non-JSON content
 	return string(bodyBytes), nil
+}
+
+// isFormContentType checks if the content type is a URL-encoded form
+func isFormContentType(contentType string) bool {
+	mediaType, _, _ := strings.Cut(contentType, ";")
+	return strings.EqualFold(strings.TrimSpace(mediaType), "application/x-www-form-urlencoded")
 }
 
 // isJSONContentType checks if the content type indicates JSON

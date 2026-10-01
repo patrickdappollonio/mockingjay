@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ func NewServer(cfg *config.Config, configFile, addr string, logger *slog.Logger,
 	timeouts := cfg.Server.Timeouts.GetWithDefaults()
 
 	server := &Server{
+		appVersion:      appVersion,
 		routes:          routes,
 		engine:          compiler.GetEngine(),
 		logger:          logger,
@@ -92,12 +94,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Acquire read lock to ensure thread-safe access to routes and engine
+	// Snapshot routes and engine under the lock so a delayed response does not hold up a reload
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Find matching route
 	routeMatch := s.findMatchingRoute(r)
+	engine := s.engine
+	s.mu.RUnlock()
+
 	if routeMatch == nil {
 		s.handleNotFound(w, r)
 		s.logRequest(r, 404, time.Since(start), nil)
@@ -105,7 +107,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build template context
-	ctx, err := s.engine.BuildTemplateContext(r, routeMatch.Params)
+	ctx, err := engine.BuildTemplateContext(r, routeMatch.Params)
 	if err != nil {
 		s.handleServerError(w, r, fmt.Errorf("failed to build template context: %w", err))
 		s.logRequest(r, 500, time.Since(start), routeMatch.Route)
@@ -116,6 +118,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := s.renderResponseHeaders(w, routeMatch.Route, ctx); err != nil {
 		s.handleTemplateError(w, r, fmt.Errorf("failed to render response headers: %w", err))
 		s.logRequest(r, 500, time.Since(start), routeMatch.Route)
+		return
+	}
+
+	status, err := renderStatus(routeMatch.Route, ctx)
+	if err != nil {
+		s.handleTemplateError(w, r, fmt.Errorf("failed to render status: %w", err))
+		s.logRequest(r, 500, time.Since(start), routeMatch.Route)
+		return
+	}
+
+	if !waitForDelay(r.Context(), routeMatch.Route.Delay) {
+		s.handleTimeout(w, r, start, routeMatch.Route)
 		return
 	}
 
@@ -131,7 +145,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				templateDone <- fmt.Errorf("template execution panicked: %v", recovered)
 			}
 		}()
-		templateDone <- s.engine.ExecuteTemplate(routeMatch.Route.Tmpl, &templateBuffer, ctx)
+		templateDone <- engine.ExecuteTemplate(routeMatch.Route.Tmpl, &templateBuffer, ctx)
 	}()
 
 	// Wait for template completion or context timeout
@@ -153,10 +167,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"remote_addr", r.RemoteAddr,
 		)
 
-		// Template rendered successfully - write the complete response
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(status)
+		if !bodyAllowedForStatus(status) {
+			break
+		}
 
-		// Write the buffered content to the response
 		_, err = w.Write(templateBuffer.Bytes())
 		if err != nil {
 			// Log write error, but don't try to send another response as headers are already sent
@@ -171,21 +186,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case <-r.Context().Done():
-		// Template execution was cancelled due to timeout
-		s.logger.Warn("request timeout - terminating",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"duration", time.Since(start),
-			"timeout", "context cancelled",
-			"remote_addr", r.RemoteAddr,
-		)
-
-		// Send timeout response immediately - don't wait for template completion
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusRequestTimeout)
-		fmt.Fprintf(w, "408 Request Timeout\n\nThe request exceeded the configured timeout and was terminated.\nTimeout occurred after: %s", time.Since(start))
-
-		s.logRequest(r, 408, time.Since(start), routeMatch.Route)
+		s.handleTimeout(w, r, start, routeMatch.Route)
 
 		// Don't wait for template completion - let it finish in background
 		go func() {
@@ -194,7 +195,69 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logRequest(r, 200, time.Since(start), routeMatch.Route)
+	s.logRequest(r, status, time.Since(start), routeMatch.Route)
+}
+
+// renderStatus returns the route's status code, rendering its status template when it has one.
+func renderStatus(route *router.Route, ctx *templatepkg.TemplateContext) (int, error) {
+	if route.StatusTmpl == nil {
+		return route.Status, nil
+	}
+
+	var buf bytes.Buffer
+	if err := route.StatusTmpl.Execute(&buf, ctx); err != nil {
+		return 0, fmt.Errorf("failed to execute status template: %w", err)
+	}
+
+	rendered := strings.TrimSpace(buf.String())
+	code, err := strconv.Atoi(rendered)
+	if err != nil {
+		return 0, fmt.Errorf("status template rendered %q, which is not a number", rendered)
+	}
+	if !config.IsValidStatusCode(code) {
+		return 0, fmt.Errorf("status template rendered %d, which is outside 200-599", code)
+	}
+
+	return code, nil
+}
+
+// waitForDelay blocks for delay and reports false if ctx ends first.
+func waitForDelay(ctx context.Context, delay time.Duration) bool {
+	if delay <= 0 {
+		return true
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// bodyAllowedForStatus reports whether a response with status may carry a body.
+func bodyAllowedForStatus(status int) bool {
+	return status != http.StatusNoContent && status != http.StatusNotModified
+}
+
+// handleTimeout handles requests whose context ended before the response was written
+func (s *Server) handleTimeout(w http.ResponseWriter, r *http.Request, start time.Time, route *router.Route) {
+	s.logger.Warn("request timeout - terminating",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"duration", time.Since(start),
+		"timeout", "context cancelled",
+		"remote_addr", r.RemoteAddr,
+	)
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusRequestTimeout)
+	fmt.Fprintf(w, "408 Request Timeout\n\nThe request exceeded the configured timeout and was terminated.\nTimeout occurred after: %s", time.Since(start))
+
+	s.logRequest(r, 408, time.Since(start), route)
 }
 
 // findMatchingRoute iterates through routes to find the first match

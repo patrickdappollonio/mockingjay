@@ -1,9 +1,13 @@
 package middleware
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"log/slog"
+	"maps"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -47,7 +51,8 @@ func (m *TimeoutMiddleware) Handler() func(http.Handler) http.Handler {
 			// Replace the request context with our timeout context
 			r = r.WithContext(ctx)
 
-			// Create a channel to track handler completion
+			// The handler writes to tw; only this goroutine writes to w
+			tw := &timeoutWriter{header: make(http.Header)}
 			done := make(chan struct{}, 1)
 
 			// Execute handler in goroutine so we can detect timeout
@@ -57,15 +62,17 @@ func (m *TimeoutMiddleware) Handler() func(http.Handler) http.Handler {
 					recover()
 					close(done)
 				}()
-				next.ServeHTTP(w, r)
+				next.ServeHTTP(NewResponseWriter(tw), r)
 			}()
 
 			// Wait for either completion or timeout
 			select {
 			case <-done:
-				// Handler completed normally
+				tw.writeTo(w)
 				return
 			case <-ctx.Done():
+				tw.expire()
+
 				// Timeout occurred - send 408 response
 				m.logger.Warn("request timeout",
 					"path", r.URL.Path,
@@ -81,4 +88,61 @@ func (m *TimeoutMiddleware) Handler() func(http.Handler) http.Handler {
 			}
 		})
 	}
+}
+
+// timeoutWriter buffers a handler's response so the middleware can send it,
+// or a 408 in its place, without the handler writing to the client directly.
+type timeoutWriter struct {
+	header http.Header
+
+	mu       sync.Mutex
+	status   int
+	body     bytes.Buffer
+	timedOut bool
+}
+
+// Header returns the buffered header map; only the handler goroutine may use it.
+func (tw *timeoutWriter) Header() http.Header {
+	return tw.header
+}
+
+// WriteHeader records the first status code written before the timeout.
+func (tw *timeoutWriter) WriteHeader(code int) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	if tw.timedOut || tw.status != 0 {
+		return
+	}
+	tw.status = code
+}
+
+// Write buffers b, or returns http.ErrHandlerTimeout once the request has timed out.
+func (tw *timeoutWriter) Write(b []byte) (int, error) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	if tw.timedOut {
+		return 0, http.ErrHandlerTimeout
+	}
+	if tw.status == 0 {
+		tw.status = http.StatusOK
+	}
+	return tw.body.Write(b)
+}
+
+// expire makes every later write fail with http.ErrHandlerTimeout.
+func (tw *timeoutWriter) expire() {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	tw.timedOut = true
+}
+
+// writeTo sends the buffered response to w; call it only after the handler returns.
+func (tw *timeoutWriter) writeTo(w http.ResponseWriter) {
+	maps.Copy(w.Header(), tw.header)
+	w.WriteHeader(cmp.Or(tw.status, http.StatusOK))
+	// A write error means the client went away; there is no one left to tell.
+	_, _ = w.Write(tw.body.Bytes())
 }

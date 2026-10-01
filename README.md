@@ -22,6 +22,8 @@ Mockingjay is a lightweight, flexible HTTP server designed for:
 - **100+ template helper functions** from [Masterminds/sprig](https://github.com/Masterminds/sprig) plus 80+ functions that generate fake data
 - **Header matching** with literal strings and regex patterns
 - **Custom response headers** with template support
+- **Custom status codes**, fixed or chosen per request with a template
+- **Response delays** to simulate slow APIs
 - **Request/response middleware** with CORS, authentication, and logging support
 - **Request timeout handling** with configurable server and middleware timeouts
 - **Built-in health check endpoint** with server metrics
@@ -164,6 +166,7 @@ The validation process performs checks on:
 - **Route Configuration**: Checks paths, HTTP methods, and route definitions
 - **Template Compilation**: Compiles all templates (inline and file-based) to catch syntax errors
 - **Response Header Templates**: Validates custom response header template syntax
+- **Status Codes**: Checks fixed status codes are between 200 and 599 and compiles status templates
 - **Regex Patterns**: Validates regex syntax in path patterns and header matching
 - **File Access**: Verifies that template files exist and are readable
 - **Header Validation**: Checks HTTP header name validity and regex patterns
@@ -227,6 +230,8 @@ middleware:
 routes:
   - path: "/api/endpoint"           # Required: URL path (literal or regex)
     method: "GET"                     # Optional: HTTP method (default: any)
+    status: 200                     # Optional: status code or template (default: 200)
+    delay: "250ms"                  # Optional: wait before responding (default: none)
     template: "Hello World"         # Either template (inline)
     # OR
     template_file: "./hello.tmpl"   # OR template_file (external file)
@@ -350,6 +355,48 @@ response_headers:
   X-User-Agent: "{{ .Headers.User-Agent }}"
   X-Timestamp: "{{ now | date \"2006-01-02T15:04:05Z07:00\" }}"
 ```
+
+### Status Codes
+
+Routes respond with `200 OK` by default. Set `status` to return a different code:
+
+```yaml
+- path: "/users"
+  method: "POST"
+  status: 201
+  template: '{"id": "{{ fakeUUID }}"}'
+```
+
+`status` can also be a template that renders a number, so a single route can return different codes depending on the request:
+
+```yaml
+- path: "/^/users/(?P<id>\\d+)$/"
+  method: "GET"
+  status: '{{ if eq .Params.id "0" }}404{{ else }}200{{ end }}'
+  template: '{"id": {{ .Params.id }}}'
+
+- path: "/flaky"
+  method: "GET"
+  status: '{{ randChoice "200" "200" "200" "503" }}'   # fails roughly 1 in 4 requests
+  template: "maybe"
+```
+
+- Fixed codes must be between `200` and `599`. Informational `1xx` codes are not supported because they can't be sent as a final response.
+- A status template that renders anything other than a number from `200` to `599` produces a `500 Internal Server Error`, and the reason is logged.
+- Responses with `204 No Content` or `304 Not Modified` are sent without a body, even when the route has a template.
+
+### Response Delay
+
+Use `delay` to make a route wait before responding, for example to test client timeouts or loading states:
+
+```yaml
+- path: "/slow-report"
+  method: "GET"
+  delay: "2s"
+  template: "done"
+```
+
+The delay uses Go duration strings (`"500ms"`, `"2s"`, `"1m"`). If the request is cancelled or hits the configured request timeout during the delay, the server stops waiting and returns `408 Request Timeout`.
 
 ## Middleware
 
@@ -798,7 +845,8 @@ Every template has access to:
   "Request": *http.Request,              // Raw HTTP request object
   "Headers": http.Header,                // Request headers with full access to http.Header methods
   "Query":   url.Values,                 // Query parameters with full access to url.Values methods
-  "Body":    interface{},                // Parsed JSON body (if applicable)
+  "Form":    url.Values,                 // Fields of a URL-encoded form body (empty otherwise)
+  "Body":    interface{},                // Parsed JSON body (if applicable), raw string otherwise
   "Params":  map[string]string           // URL parameters from regex captures
 }
 ```
@@ -826,6 +874,18 @@ template: |
 
   Full JSON body: {{ .Body | toPrettyJson }}
 ```
+
+### Form Body Access
+
+For requests with `Content-Type: application/x-www-form-urlencoded`, the fields are available in `.Form`:
+
+```yaml
+template: |
+  Welcome {{ .Form.Get "username" }}!
+  Selected tags: {{ index .Form "tag" | join ", " }}
+```
+
+`.Body` still holds the raw form string. Multipart forms (`multipart/form-data`) are not parsed.
 
 ## Template Helper Functions
 
@@ -946,7 +1006,7 @@ Debug output includes:
 ### Hot-Reload Support
 
 Mockingjay supports hot-reloading of configuration files:
-- **File watching**: Automatically detects changes to the config file
+- **File watching**: Automatically detects changes to the config file, including editors that save by replacing the file (such as Vim)
 - **Template recompilation**: All templates are recompiled when configuration changes
 - **Atomic reloads**: Routes, templates, and middleware are updated atomically
 - **Zero downtime**: Server continues serving requests during reload

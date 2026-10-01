@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,11 +94,30 @@ func (dc *DelimiterConfig) GetWithDefaults() DelimiterConfig {
 // RouteConfig represents a single route configuration from YAML
 type RouteConfig struct {
 	Path            string            `yaml:"path"`
-	Method          string            `yaml:"method"`
+	Method          string            `yaml:"method,omitempty"` // empty matches any method
+	Status          string            `yaml:"status,omitempty"` // a status code or a template rendering one; empty means 200
+	Delay           time.Duration     `yaml:"delay,omitempty"`  // wait before responding
 	Template        string            `yaml:"template,omitempty"`
 	TemplateFile    string            `yaml:"template_file,omitempty"`
 	MatchHeaders    map[string]string `yaml:"match_headers,omitempty"`
 	ResponseHeaders map[string]string `yaml:"response_headers,omitempty"`
+}
+
+// IsValidStatusCode reports whether code can be sent as a route's final status.
+// Informational 1xx codes are excluded: net/http sends them as interim
+// responses and follows them with an implicit 200.
+func IsValidStatusCode(code int) bool {
+	return code >= 200 && code <= 599
+}
+
+// StaticStatus returns the route's status code when Status is a plain number.
+// It returns false when Status is empty or a template.
+func (r *RouteConfig) StaticStatus() (int, bool) {
+	code, err := strconv.Atoi(strings.TrimSpace(r.Status))
+	if err != nil {
+		return 0, false
+	}
+	return code, true
 }
 
 // LoadConfig loads and validates a configuration from a YAML file
@@ -198,6 +218,17 @@ func (r *RouteConfig) Validate() error {
 		return err
 	}
 
+	if err := r.validateStatus(); err != nil {
+		return err
+	}
+
+	if r.Delay < 0 {
+		return &ValidationError{
+			Field:   "delay",
+			Message: fmt.Sprintf("delay cannot be negative, got %s", r.Delay),
+		}
+	}
+
 	// Validate exactly one of template or template_file is provided
 	if err := r.validateTemplateSource(); err != nil {
 		return err
@@ -231,10 +262,7 @@ func (r *RouteConfig) Validate() error {
 // validateHTTPMethod checks if the HTTP method is valid
 func (r *RouteConfig) validateHTTPMethod() error {
 	if strings.TrimSpace(r.Method) == "" {
-		return &ValidationError{
-			Field:   "method",
-			Message: "HTTP method cannot be empty",
-		}
+		return nil
 	}
 
 	method := strings.ToUpper(strings.TrimSpace(r.Method))
@@ -259,6 +287,20 @@ func (r *RouteConfig) validateHTTPMethod() error {
 	return &ValidationError{
 		Field:   "method",
 		Message: fmt.Sprintf("invalid HTTP method %q, must be one of: %s", method, strings.Join(validMethods, ", ")),
+	}
+}
+
+// validateStatus checks the range of a numeric status. Templated statuses are
+// checked by ValidateTemplates, which knows the configured delimiters.
+func (r *RouteConfig) validateStatus() error {
+	code, ok := r.StaticStatus()
+	if !ok || IsValidStatusCode(code) {
+		return nil
+	}
+
+	return &ValidationError{
+		Field:   "status",
+		Message: fmt.Sprintf("invalid status code %d, must be between 200 and 599", code),
 	}
 }
 
@@ -531,6 +573,35 @@ func (c *Config) ValidateTemplates() error {
 		if err := c.validateRouteTemplates(engine, route, i); err != nil {
 			return err
 		}
+
+		if err := validateStatusTemplate(engine, route, i, delimiters.Left); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateStatusTemplate compiles a non-numeric status, which must contain the
+// left delimiter so a typo like "created" is not accepted as a literal template.
+func validateStatusTemplate(engine *templatepkg.Engine, route RouteConfig, routeIndex int, leftDelim string) error {
+	if strings.TrimSpace(route.Status) == "" {
+		return nil
+	}
+	if _, ok := route.StaticStatus(); ok {
+		return nil
+	}
+
+	if !strings.Contains(route.Status, leftDelim) {
+		return &ValidationError{
+			Field:   "status",
+			Message: fmt.Sprintf("route[%d] status %q must be a number or a template", routeIndex, route.Status),
+		}
+	}
+
+	templateName := fmt.Sprintf("validation_status_%d_%s_%s", routeIndex, route.GetNormalizedMethod(), sanitizeTemplateNameForValidation(route.Path))
+	if _, err := engine.CompileInlineTemplate(templateName, route.Status); err != nil {
+		return fmt.Errorf("route[%d] status template compilation failed: %w", routeIndex, err)
 	}
 
 	return nil

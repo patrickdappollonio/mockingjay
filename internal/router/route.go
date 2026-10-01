@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 )
 
 // HeaderMatcher represents a compiled header matching rule
@@ -18,7 +19,7 @@ type HeaderMatcher struct {
 type Route struct {
 	// Original configuration
 	Pattern string // The original path pattern from config
-	Method  string // HTTP method (uppercase)
+	Method  string // HTTP method (uppercase); empty matches any method
 
 	// Compiled regex information
 	IsRegexp bool           // Whether this route uses regex matching
@@ -32,6 +33,12 @@ type Route struct {
 
 	// Response headers
 	ResponseHeaders map[string]*template.Template // Compiled response header templates
+
+	// Response status: StatusTmpl, when set, renders the code and Status is unused
+	Status     int
+	StatusTmpl *template.Template
+
+	Delay time.Duration // Wait before responding
 
 	// Template source info (for debugging/logging)
 	TemplateSource string // "inline" or filename
@@ -74,7 +81,7 @@ func (r *Route) MatchRequest(req *http.Request) (*RouteMatch, bool) {
 
 // matchesMethod checks if the route's method matches the request method
 func (r *Route) matchesMethod(method string) bool {
-	return strings.EqualFold(r.Method, method)
+	return r.Method == "" || strings.EqualFold(r.Method, method)
 }
 
 // matchRegexPattern matches the request path against the regex pattern

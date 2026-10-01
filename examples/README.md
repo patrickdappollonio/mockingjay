@@ -20,6 +20,7 @@ mockingjay -config examples/{example-name}.yaml
 - **[advanced-middleware.yaml](advanced-middleware.yaml)** - Production-ready middleware (CORS, auth, logging)
 - **[custom-timeouts.yaml](custom-timeouts.yaml)** - Server and middleware timeout configuration
 - **[response-headers.yaml](response-headers.yaml)** - Static and dynamic response header manipulation
+- **[status-codes.yaml](status-codes.yaml)** - Custom and templated status codes, response delays, form fields and catch-all routes
 
 ### 📄 Templates & Files
 - **[template-files.yaml](template-files.yaml)** - Using external template files instead of inline templates
