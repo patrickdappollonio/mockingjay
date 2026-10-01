@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -279,10 +280,8 @@ func (r *RouteConfig) validateHTTPMethod() error {
 		http.MethodTrace,
 	}
 
-	for _, validMethod := range validMethods {
-		if method == validMethod {
-			return nil
-		}
+	if slices.Contains(validMethods, method) {
+		return nil
 	}
 
 	return &ValidationError{

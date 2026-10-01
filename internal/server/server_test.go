@@ -209,7 +209,7 @@ func TestServer_Integration_JSONEchoEndpoint(t *testing.T) {
 	ts := NewTestServer(t, cfg)
 
 	// Test with valid JSON
-	jsonData := map[string]interface{}{
+	jsonData := map[string]any{
 		"message": "hello world",
 		"count":   42,
 	}

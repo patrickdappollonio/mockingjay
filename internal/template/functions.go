@@ -16,7 +16,7 @@ func trimPrefix(prefix, s string) string {
 
 // sleep introduces a delay for timeout testing with context awareness
 // Usage in templates: {{ sleep "200ms" }} or {{ sleep 1 }} (for 1 second)
-func sleep(duration interface{}) string {
+func sleep(duration any) string {
 	var d time.Duration
 
 	switch v := duration.(type) {
@@ -47,7 +47,7 @@ func sleep(duration interface{}) string {
 // randFloat generates a random float64 between min and max (inclusive)
 // Usage in templates: {{ randFloat 1.0 10.0 }} or {{ randFloat 0 1 }}
 // Takes the same parameters as sprig's randInt but returns a float64
-func randFloat(min, max interface{}) float64 {
+func randFloat(min, max any) float64 {
 	minFloat := toFloat64(min)
 	maxFloat := toFloat64(max)
 
@@ -63,7 +63,7 @@ func randFloat(min, max interface{}) float64 {
 
 // randChoice randomly selects one value from the provided options of any type
 // Usage in templates: {{ randChoice "red" "green" "blue" }} or {{ randChoice 1 2 3 }} or {{ randChoice 1.5 "text" true }}
-func randChoice(choices ...interface{}) interface{} {
+func randChoice(choices ...any) any {
 	if len(choices) == 0 {
 		return nil
 	}
@@ -79,7 +79,7 @@ func randChoice(choices ...interface{}) interface{} {
 
 // toFloat64 converts template-compatible numeric types to float64
 // In Go templates, numeric literals are parsed as int or float64
-func toFloat64(v interface{}) float64 {
+func toFloat64(v any) float64 {
 	switch val := v.(type) {
 	case float64:
 		return val

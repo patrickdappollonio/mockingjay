@@ -23,7 +23,7 @@ type TemplateContext struct {
 	Form url.Values `json:"form"`
 
 	// Body contains the parsed request body (JSON if applicable, string otherwise)
-	Body interface{} `json:"body"`
+	Body any `json:"body"`
 
 	// Params contains named capture groups from regex route patterns
 	Params map[string]string `json:"params"`
@@ -58,7 +58,7 @@ func NewTemplateContext(req *http.Request, params map[string]string) (*TemplateC
 
 // parseRequestBody attempts to parse the request body
 // Returns parsed JSON if Content-Type indicates JSON, otherwise returns raw string
-func parseRequestBody(req *http.Request) (interface{}, error) {
+func parseRequestBody(req *http.Request) (any, error) {
 	if req.Body == nil {
 		return nil, nil
 	}
@@ -83,10 +83,10 @@ func parseRequestBody(req *http.Request) (interface{}, error) {
 
 	// Attempt JSON parsing if content type suggests JSON
 	if isJSONContentType(contentType) {
-		var jsonBody interface{}
+		var jsonBody any
 		if err := json.Unmarshal(bodyBytes, &jsonBody); err != nil {
 			// If JSON parsing fails, return as string with error info
-			return map[string]interface{}{
+			return map[string]any{
 				"raw":         string(bodyBytes),
 				"parse_error": err.Error(),
 			}, nil

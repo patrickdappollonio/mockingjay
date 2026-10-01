@@ -9,117 +9,117 @@ import (
 func TestFakeFunctions(t *testing.T) {
 	tests := []struct {
 		name      string
-		funcCall  func() interface{}
-		validator func(interface{}) bool
+		funcCall  func() any
+		validator func(any) bool
 	}{
 		{
 			name:     "fakeName returns non-empty string",
-			funcCall: func() interface{} { return fakeName() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeName() },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && len(s) > 0
 			},
 		},
 		{
 			name:     "fakeEmail returns valid email format",
-			funcCall: func() interface{} { return fakeEmail() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeEmail() },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && strings.Contains(s, "@") && strings.Contains(s, ".")
 			},
 		},
 		{
 			name:     "fakePhone returns non-empty string",
-			funcCall: func() interface{} { return fakePhone() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakePhone() },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && len(s) > 0
 			},
 		},
 		{
 			name:     "fakeCompany returns non-empty string",
-			funcCall: func() interface{} { return fakeCompany() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeCompany() },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && len(s) > 0
 			},
 		},
 		{
 			name:     "fakeJobTitle returns non-empty string",
-			funcCall: func() interface{} { return fakeJobTitle() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeJobTitle() },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && len(s) > 0
 			},
 		},
 		{
 			name:     "fakeCreditCardNumber returns non-empty string",
-			funcCall: func() interface{} { return fakeCreditCardNumber() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeCreditCardNumber() },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && len(s) > 0
 			},
 		},
 		{
 			name:     "fakeColor returns non-empty string",
-			funcCall: func() interface{} { return fakeColor() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeColor() },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && len(s) > 0
 			},
 		},
 		{
 			name:     "fakeUUID returns valid UUID format",
-			funcCall: func() interface{} { return fakeUUID() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeUUID() },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && len(s) == 36 && strings.Count(s, "-") == 4
 			},
 		},
 		{
 			name:     "fakeDate returns valid time",
-			funcCall: func() interface{} { return fakeDate() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeDate() },
+			validator: func(v any) bool {
 				_, ok := v.(time.Time)
 				return ok
 			},
 		},
 		{
 			name:     "fakeMonth returns valid month number",
-			funcCall: func() interface{} { return fakeMonth() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeMonth() },
+			validator: func(v any) bool {
 				m, ok := v.(int)
 				return ok && m >= 1 && m <= 12
 			},
 		},
 		{
 			name:     "fakeYear returns reasonable year",
-			funcCall: func() interface{} { return fakeYear() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeYear() },
+			validator: func(v any) bool {
 				y, ok := v.(int)
 				return ok && y >= 1900 && y <= 2100
 			},
 		},
 		{
 			name:     "fakeRandomBool returns boolean",
-			funcCall: func() interface{} { return fakeRandomBool() },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeRandomBool() },
+			validator: func(v any) bool {
 				_, ok := v.(bool)
 				return ok
 			},
 		},
 		{
 			name:     "fakeWords generates requested number of words",
-			funcCall: func() interface{} { return fakeWords(3) },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakeWords(3) },
+			validator: func(v any) bool {
 				s, ok := v.(string)
 				return ok && len(strings.Fields(s)) == 3
 			},
 		},
 		{
 			name:     "fakePrice generates price in range",
-			funcCall: func() interface{} { return fakePrice(10.0, 20.0) },
-			validator: func(v interface{}) bool {
+			funcCall: func() any { return fakePrice(10.0, 20.0) },
+			validator: func(v any) bool {
 				p, ok := v.(float64)
 				return ok && p >= 10.0 && p <= 20.0
 			},

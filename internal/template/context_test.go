@@ -64,7 +64,7 @@ func TestNewTemplateContext_Basic(t *testing.T) {
 	}
 
 	// Verify body is parsed as JSON
-	jsonBody, ok := ctx.Body.(map[string]interface{})
+	jsonBody, ok := ctx.Body.(map[string]any)
 	if !ok {
 		t.Errorf("NewTemplateContext() context Body should be map[string]interface{}, got %T", ctx.Body)
 	} else {
@@ -153,7 +153,7 @@ func TestParseRequestBody_JSON(t *testing.T) {
 				actualType = "<nil>"
 			} else {
 				switch res := result.(type) {
-				case map[string]interface{}:
+				case map[string]any:
 					actualType = "map[string]interface{}"
 					// For invalid JSON, check if it contains parse_error
 					if _, hasError := res["parse_error"]; hasError && tt.body == `{invalid json}` {
@@ -163,7 +163,7 @@ func TestParseRequestBody_JSON(t *testing.T) {
 							t.Errorf("parseRequestBody() parsed JSON name = %v, want test", name)
 						}
 					}
-				case []interface{}:
+				case []any:
 					actualType = "[]interface{}"
 				case string:
 					actualType = "string"
@@ -246,7 +246,7 @@ func TestParseRequestBody_EdgeCases(t *testing.T) {
 		name       string
 		setupReq   func() *http.Request
 		wantErr    bool
-		wantResult interface{}
+		wantResult any
 	}{
 		{
 			name: "nil body",
@@ -410,13 +410,13 @@ func TestNewTemplateContext_ErrorHandling(t *testing.T) {
 }
 
 func TestNewTemplateContext_WithComplexJSON(t *testing.T) {
-	jsonData := map[string]interface{}{
-		"user": map[string]interface{}{
+	jsonData := map[string]any{
+		"user": map[string]any{
 			"id":   123,
 			"name": "John Doe",
 			"tags": []string{"admin", "developer"},
 		},
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"version":   "1.0",
 			"timestamp": "2023-01-01T00:00:00Z",
 		},
@@ -445,7 +445,7 @@ func TestNewTemplateContext_WithComplexJSON(t *testing.T) {
 	}
 
 	// Verify complex JSON body parsing
-	bodyMap, ok := ctx.Body.(map[string]interface{})
+	bodyMap, ok := ctx.Body.(map[string]any)
 	if !ok {
 		t.Errorf("NewTemplateContext() body should be map[string]interface{}, got %T", ctx.Body)
 		return
@@ -458,7 +458,7 @@ func TestNewTemplateContext_WithComplexJSON(t *testing.T) {
 		return
 	}
 
-	userMap, ok := user.(map[string]interface{})
+	userMap, ok := user.(map[string]any)
 	if !ok {
 		t.Errorf("NewTemplateContext() body.user should be map[string]interface{}, got %T", user)
 		return
@@ -475,7 +475,7 @@ func TestNewTemplateContext_WithComplexJSON(t *testing.T) {
 		return
 	}
 
-	tagsArray, ok := tags.([]interface{})
+	tagsArray, ok := tags.([]any)
 	if !ok {
 		t.Errorf("NewTemplateContext() body.user.tags should be []interface{}, got %T", tags)
 		return

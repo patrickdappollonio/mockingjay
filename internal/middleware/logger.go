@@ -3,6 +3,7 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -83,10 +84,5 @@ func (l *LoggerMiddleware) Handler() func(http.Handler) http.Handler {
 
 // shouldSkipPath checks if a path should be skipped from logging
 func (l *LoggerMiddleware) shouldSkipPath(path string) bool {
-	for _, skipPath := range l.config.SkipPaths {
-		if path == skipPath {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(l.config.SkipPaths, path)
 }
