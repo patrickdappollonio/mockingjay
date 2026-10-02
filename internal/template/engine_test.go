@@ -612,7 +612,7 @@ func TestEngine_CompileInlineTemplateWithCustomDelimiters(t *testing.T) {
 		leftDelim  string
 		rightDelim string
 		content    string
-		data       interface{}
+		data       any
 		wantOutput string
 		wantErr    bool
 	}{
@@ -704,7 +704,7 @@ func TestEngine_CompileFileTemplateWithCustomDelimiters(t *testing.T) {
 	}
 
 	// Test execution with data
-	data := map[string]interface{}{
+	data := map[string]any{
 		"Name":  "Alice",
 		"Value": 123,
 	}

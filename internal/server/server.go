@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/patrickdappollonio/mockingjay/internal/config"
@@ -52,6 +55,7 @@ func NewServer(cfg *config.Config, configFile, addr string, logger *slog.Logger,
 	timeouts := cfg.Server.Timeouts.GetWithDefaults()
 
 	server := &Server{
+		appVersion:      appVersion,
 		routes:          routes,
 		engine:          compiler.GetEngine(),
 		logger:          logger,
@@ -92,12 +96,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Acquire read lock to ensure thread-safe access to routes and engine
+	// Snapshot routes and engine under the lock so a delayed response does not hold up a reload
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Find matching route
 	routeMatch := s.findMatchingRoute(r)
+	engine := s.engine
+	s.mu.RUnlock()
+
 	if routeMatch == nil {
 		s.handleNotFound(w, r)
 		s.logRequest(r, 404, time.Since(start), nil)
@@ -105,7 +109,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build template context
-	ctx, err := s.engine.BuildTemplateContext(r, routeMatch.Params)
+	ctx, err := engine.BuildTemplateContext(r, routeMatch.Params)
 	if err != nil {
 		s.handleServerError(w, r, fmt.Errorf("failed to build template context: %w", err))
 		s.logRequest(r, 500, time.Since(start), routeMatch.Route)
@@ -119,46 +123,42 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Execute template with timeout protection
-	// We use a buffered approach with goroutine to allow template execution cancellation
-	var templateBuffer bytes.Buffer
-	templateDone := make(chan error, 1)
+	status, err := renderStatus(routeMatch.Route, ctx)
+	if err != nil {
+		s.handleTemplateError(w, r, fmt.Errorf("failed to render status: %w", err))
+		s.logRequest(r, 500, time.Since(start), routeMatch.Route)
+		return
+	}
+
+	if !waitForDelay(r.Context(), routeMatch.Route.Delay) {
+		s.handleTimeout(w, r, start, routeMatch.Route)
+		return
+	}
+
 	templateStart := time.Now()
-
-	go func() {
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				templateDone <- fmt.Errorf("template execution panicked: %v", recovered)
-			}
-		}()
-		templateDone <- s.engine.ExecuteTemplate(routeMatch.Route.Tmpl, &templateBuffer, ctx)
-	}()
-
-	// Wait for template completion or context timeout
-	select {
-	case err = <-templateDone:
-		if err != nil {
-			s.handleTemplateError(w, r, err)
-			s.logRequest(r, 500, time.Since(start), routeMatch.Route)
+	body, err := renderBody(r.Context(), engine, routeMatch.Route.Tmpl, ctx)
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.handleTimeout(w, r, start, routeMatch.Route)
 			return
 		}
+		s.handleTemplateError(w, r, err)
+		s.logRequest(r, 500, time.Since(start), routeMatch.Route)
+		return
+	}
 
-		// Log template execution time for performance analysis
-		templateDuration := time.Since(templateStart)
-		s.logger.Info("template execution completed",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"template_duration", templateDuration,
-			"buffer_size", templateBuffer.Len(),
-			"remote_addr", r.RemoteAddr,
-		)
+	// Log template execution time for performance analysis
+	s.logger.Info("template execution completed",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"template_duration", time.Since(templateStart),
+		"buffer_size", len(body),
+		"remote_addr", r.RemoteAddr,
+	)
 
-		// Template rendered successfully - write the complete response
-		w.WriteHeader(http.StatusOK)
-
-		// Write the buffered content to the response
-		_, err = w.Write(templateBuffer.Bytes())
-		if err != nil {
+	w.WriteHeader(status)
+	if bodyAllowedForStatus(status) {
+		if _, err := w.Write(body); err != nil {
 			// Log write error, but don't try to send another response as headers are already sent
 			s.logger.Error("failed to write template response",
 				"method", r.Method,
@@ -169,32 +169,97 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.logRequest(r, 500, time.Since(start), routeMatch.Route)
 			return
 		}
-
-	case <-r.Context().Done():
-		// Template execution was cancelled due to timeout
-		s.logger.Warn("request timeout - terminating",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"duration", time.Since(start),
-			"timeout", "context cancelled",
-			"remote_addr", r.RemoteAddr,
-		)
-
-		// Send timeout response immediately - don't wait for template completion
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusRequestTimeout)
-		fmt.Fprintf(w, "408 Request Timeout\n\nThe request exceeded the configured timeout and was terminated.\nTimeout occurred after: %s", time.Since(start))
-
-		s.logRequest(r, 408, time.Since(start), routeMatch.Route)
-
-		// Don't wait for template completion - let it finish in background
-		go func() {
-			<-templateDone // Consume the channel to prevent goroutine leak
-		}()
-		return
 	}
 
-	s.logRequest(r, 200, time.Since(start), routeMatch.Route)
+	s.logRequest(r, status, time.Since(start), routeMatch.Route)
+}
+
+// renderBody executes tmpl and returns ctx's error if ctx ends first; the
+// template then finishes in the background and its output is discarded.
+func renderBody(ctx context.Context, engine *templatepkg.Engine, tmpl *template.Template, data *templatepkg.TemplateContext) ([]byte, error) {
+	var buf bytes.Buffer
+	done := make(chan error, 1)
+
+	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				done <- fmt.Errorf("template execution panicked: %v", recovered)
+			}
+		}()
+		done <- engine.ExecuteTemplate(tmpl, &buf, data)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// renderStatus returns the route's status code, rendering its status template when it has one.
+func renderStatus(route *router.Route, ctx *templatepkg.TemplateContext) (int, error) {
+	if route.StatusTmpl == nil {
+		return route.Status, nil
+	}
+
+	var buf bytes.Buffer
+	if err := route.StatusTmpl.Execute(&buf, ctx); err != nil {
+		return 0, fmt.Errorf("failed to execute status template: %w", err)
+	}
+
+	rendered := strings.TrimSpace(buf.String())
+	code, err := strconv.Atoi(rendered)
+	if err != nil {
+		return 0, fmt.Errorf("status template rendered %q, which is not a number", rendered)
+	}
+	if !config.IsValidStatusCode(code) {
+		return 0, fmt.Errorf("status template rendered %d, which is outside 200-599", code)
+	}
+
+	return code, nil
+}
+
+// waitForDelay blocks for delay and reports false if ctx ends first.
+func waitForDelay(ctx context.Context, delay time.Duration) bool {
+	if delay <= 0 {
+		return true
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// bodyAllowedForStatus reports whether a response with status may carry a body.
+func bodyAllowedForStatus(status int) bool {
+	return status != http.StatusNoContent && status != http.StatusNotModified
+}
+
+// handleTimeout handles requests whose context ended before the response was written
+func (s *Server) handleTimeout(w http.ResponseWriter, r *http.Request, start time.Time, route *router.Route) {
+	s.logger.Warn("request timeout - terminating",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"duration", time.Since(start),
+		"timeout", "context cancelled",
+		"remote_addr", r.RemoteAddr,
+	)
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusRequestTimeout)
+	fmt.Fprintf(w, "408 Request Timeout\n\nThe request exceeded the configured timeout and was terminated.\nTimeout occurred after: %s", time.Since(start))
+
+	s.logRequest(r, 408, time.Since(start), route)
 }
 
 // findMatchingRoute iterates through routes to find the first match
@@ -211,7 +276,7 @@ func (s *Server) findMatchingRoute(r *http.Request) *router.RouteMatch {
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
-	fmt.Fprintf(w, "404 Not Found: no route matches %s %s", r.Method, r.URL.Path)
+	fmt.Fprintf(w, "404 Not Found: no route matches %s %s", html.EscapeString(r.Method), html.EscapeString(r.URL.Path))
 }
 
 // handleServerError handles 500 errors

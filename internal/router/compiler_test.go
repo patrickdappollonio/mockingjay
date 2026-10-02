@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 
 	"github.com/patrickdappollonio/mockingjay/internal/config"
 )
@@ -959,6 +960,81 @@ func TestCompiler_CompileResponseHeaders(t *testing.T) {
 
 			if !tt.wantErr && tt.validate != nil {
 				tt.validate(t, route.ResponseHeaders)
+			}
+		})
+	}
+}
+
+func TestCompiler_CompileRoute_StatusAndDelay(t *testing.T) {
+	compiler := NewCompiler()
+
+	tests := []struct {
+		name         string
+		status       string
+		delay        time.Duration
+		wantStatus   int
+		wantTemplate bool
+		wantDelay    time.Duration
+		wantErr      bool
+	}{
+		{
+			name:       "no status defaults to 200",
+			wantStatus: 200,
+		},
+		{
+			name:       "numeric status",
+			status:     "201",
+			wantStatus: 201,
+		},
+		{
+			name:       "numeric status with surrounding spaces",
+			status:     " 404 ",
+			wantStatus: 404,
+		},
+		{
+			name:         "templated status",
+			status:       `{{ if .Query.Get "fail" }}503{{ else }}200{{ end }}`,
+			wantTemplate: true,
+		},
+		{
+			name:    "templated status with syntax error",
+			status:  "{{ if }}",
+			wantErr: true,
+		},
+		{
+			name:       "delay",
+			delay:      250 * time.Millisecond,
+			wantStatus: 200,
+			wantDelay:  250 * time.Millisecond,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			routeConfig := config.RouteConfig{
+				Path:     "/test",
+				Method:   "GET",
+				Status:   tt.status,
+				Delay:    tt.delay,
+				Template: "body",
+			}
+
+			route, err := compiler.CompileRoute(routeConfig)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("CompileRoute(status=%q) error = %v, wantErr %v", tt.status, err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if route.Status != tt.wantStatus {
+				t.Errorf("CompileRoute(status=%q) Status = %d, want %d", tt.status, route.Status, tt.wantStatus)
+			}
+			if (route.StatusTmpl != nil) != tt.wantTemplate {
+				t.Errorf("CompileRoute(status=%q) has status template = %v, want %v", tt.status, route.StatusTmpl != nil, tt.wantTemplate)
+			}
+			if route.Delay != tt.wantDelay {
+				t.Errorf("CompileRoute(delay=%s) Delay = %s, want %s", tt.delay, route.Delay, tt.wantDelay)
 			}
 		})
 	}

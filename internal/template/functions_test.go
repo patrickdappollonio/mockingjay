@@ -1,6 +1,7 @@
 package template
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -58,7 +59,7 @@ func TestTrimPrefix(t *testing.T) {
 func TestSleep(t *testing.T) {
 	tests := []struct {
 		name        string
-		duration    interface{}
+		duration    any
 		expectDelay bool
 		minDuration time.Duration
 		maxDuration time.Duration
@@ -145,8 +146,8 @@ func TestSleep(t *testing.T) {
 func TestRandFloat(t *testing.T) {
 	tests := []struct {
 		name     string
-		min      interface{}
-		max      interface{}
+		min      any
+		max      any
 		testFunc func(t *testing.T, result float64)
 	}{
 		{
@@ -235,7 +236,7 @@ func TestRandFloat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Run the function multiple times to test randomness
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				result := randFloat(tt.min, tt.max)
 				tt.testFunc(t, result)
 			}
@@ -249,7 +250,7 @@ func TestRandFloatDistribution(t *testing.T) {
 	count := 1000
 	results := make([]float64, count)
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		results[i] = randFloat(min, max)
 	}
 
@@ -291,7 +292,7 @@ func TestRandFloatDistribution(t *testing.T) {
 func TestToFloat64(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    interface{}
+		input    any
 		expected float64
 	}{
 		// Template-compatible types (what Go templates actually parse)
@@ -323,13 +324,13 @@ func TestToFloat64(t *testing.T) {
 func TestRandChoice(t *testing.T) {
 	tests := []struct {
 		name     string
-		choices  []interface{}
-		testFunc func(t *testing.T, result interface{})
+		choices  []any
+		testFunc func(t *testing.T, result any)
 	}{
 		{
 			name:    "no arguments",
-			choices: []interface{}{},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{},
+			testFunc: func(t *testing.T, result any) {
 				if result != nil {
 					t.Errorf("randChoice() = %v, expected nil", result)
 				}
@@ -337,8 +338,8 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "single string argument",
-			choices: []interface{}{"only"},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{"only"},
+			testFunc: func(t *testing.T, result any) {
 				if result != "only" {
 					t.Errorf("randChoice(\"only\") = %v, expected \"only\"", result)
 				}
@@ -346,8 +347,8 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "string choices",
-			choices: []interface{}{"red", "blue"},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{"red", "blue"},
+			testFunc: func(t *testing.T, result any) {
 				if result != "red" && result != "blue" {
 					t.Errorf("randChoice(\"red\", \"blue\") = %v, expected \"red\" or \"blue\"", result)
 				}
@@ -355,8 +356,8 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "integer choices",
-			choices: []interface{}{1, 2, 3, 4, 5},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{1, 2, 3, 4, 5},
+			testFunc: func(t *testing.T, result any) {
 				validChoices := map[int]bool{1: true, 2: true, 3: true, 4: true, 5: true}
 				if intResult, ok := result.(int); !ok || !validChoices[intResult] {
 					t.Errorf("randChoice(1, 2, 3, 4, 5) = %v, expected one of the provided integer choices", result)
@@ -365,8 +366,8 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "float choices",
-			choices: []interface{}{1.1, 2.2, 3.3},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{1.1, 2.2, 3.3},
+			testFunc: func(t *testing.T, result any) {
 				validChoices := map[float64]bool{1.1: true, 2.2: true, 3.3: true}
 				if floatResult, ok := result.(float64); !ok || !validChoices[floatResult] {
 					t.Errorf("randChoice(1.1, 2.2, 3.3) = %v, expected one of the provided float choices", result)
@@ -375,8 +376,8 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "boolean choices",
-			choices: []interface{}{true, false},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{true, false},
+			testFunc: func(t *testing.T, result any) {
 				if result != true && result != false {
 					t.Errorf("randChoice(true, false) = %v, expected true or false", result)
 				}
@@ -384,9 +385,9 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "mixed type choices",
-			choices: []interface{}{"text", 42, 3.14, true, false},
-			testFunc: func(t *testing.T, result interface{}) {
-				validChoices := map[interface{}]bool{
+			choices: []any{"text", 42, 3.14, true, false},
+			testFunc: func(t *testing.T, result any) {
+				validChoices := map[any]bool{
 					"text": true,
 					42:     true,
 					3.14:   true,
@@ -400,8 +401,8 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "string choices with empty strings",
-			choices: []interface{}{"", "non-empty", ""},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{"", "non-empty", ""},
+			testFunc: func(t *testing.T, result any) {
 				if result != "" && result != "non-empty" {
 					t.Errorf("randChoice(\"\", \"non-empty\", \"\") = %v, expected \"\" or \"non-empty\"", result)
 				}
@@ -409,8 +410,8 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "choices with special characters",
-			choices: []interface{}{"hello world", "foo-bar", "test_123", "special!@#"},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{"hello world", "foo-bar", "test_123", "special!@#"},
+			testFunc: func(t *testing.T, result any) {
 				validChoices := map[string]bool{
 					"hello world": true,
 					"foo-bar":     true,
@@ -424,8 +425,8 @@ func TestRandChoice(t *testing.T) {
 		},
 		{
 			name:    "nil values in choices",
-			choices: []interface{}{nil, "valid", nil},
-			testFunc: func(t *testing.T, result interface{}) {
+			choices: []any{nil, "valid", nil},
+			testFunc: func(t *testing.T, result any) {
 				if result != nil && result != "valid" {
 					t.Errorf("randChoice(nil, \"valid\", nil) = %v, expected nil or \"valid\"", result)
 				}
@@ -451,11 +452,11 @@ func TestRandChoice(t *testing.T) {
 
 func TestRandChoiceDistribution(t *testing.T) {
 	// Test that randChoice produces reasonable distribution with strings
-	choices := []interface{}{"A", "B", "C"}
+	choices := []any{"A", "B", "C"}
 	count := 300
-	results := make(map[interface{}]int)
+	results := make(map[any]int)
 
-	for i := 0; i < count; i++ {
+	for range count {
 		result := randChoice(choices...)
 		results[result]++
 	}
@@ -469,13 +470,7 @@ func TestRandChoiceDistribution(t *testing.T) {
 
 	// Check that no invalid choices were returned
 	for result := range results {
-		found := false
-		for _, choice := range choices {
-			if result == choice {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(choices, result)
 		if !found {
 			t.Errorf("randChoice returned invalid result %v", result)
 		}
@@ -499,11 +494,11 @@ func TestRandChoiceDistribution(t *testing.T) {
 func TestRandChoiceTypedDistribution(t *testing.T) {
 	// Test distribution with different types
 	t.Run("integer distribution", func(t *testing.T) {
-		choices := []interface{}{1, 2, 3}
+		choices := []any{1, 2, 3}
 		count := 150
-		results := make(map[interface{}]int)
+		results := make(map[any]int)
 
-		for i := 0; i < count; i++ {
+		for range count {
 			result := randChoice(choices...)
 			results[result]++
 		}
@@ -519,11 +514,11 @@ func TestRandChoiceTypedDistribution(t *testing.T) {
 	})
 
 	t.Run("mixed type distribution", func(t *testing.T) {
-		choices := []interface{}{"text", 42, 3.14, true}
+		choices := []any{"text", 42, 3.14, true}
 		count := 200
-		results := make(map[interface{}]int)
+		results := make(map[any]int)
 
-		for i := 0; i < count; i++ {
+		for range count {
 			result := randChoice(choices...)
 			results[result]++
 		}
@@ -542,7 +537,7 @@ func TestRandChoiceTypedDistribution(t *testing.T) {
 func TestToJsonPretty(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    interface{}
+		input    any
 		expected string
 	}{
 		{
@@ -555,7 +550,7 @@ func TestToJsonPretty(t *testing.T) {
 		},
 		{
 			name:  "nested object",
-			input: map[string]interface{}{"user": map[string]string{"name": "Jane"}, "active": true},
+			input: map[string]any{"user": map[string]string{"name": "Jane"}, "active": true},
 			expected: `{
   "active": true,
   "user": {

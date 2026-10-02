@@ -173,6 +173,16 @@ routes:
     # Options: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
     method: "GET"
 
+    # Response status code (optional, default: 200)
+    # A number from 200 to 599, or a template that renders one, e.g.
+    #   status: '{{ if .Query.Get "fail" }}500{{ else }}200{{ end }}'
+    # 204 and 304 responses are sent without a body
+    status: 200
+
+    # Wait before responding (optional, default: no delay)
+    # Go duration string: "500ms", "2s", "1m"
+    # delay: "500ms"
+
     # Inline template content (use either template OR template_file)
     template: |
       {
@@ -326,8 +336,9 @@ routes:
   # CATCH-ALL ROUTE (404 handler)
   # --------------------------------------------------------------------------
   # This should be the LAST route as it matches everything
+  # No method, so it matches every HTTP method
   - path: "/^.*$/"
-    method: "GET"
+    status: 404
     template: |
       {
         "error": "Not Found",

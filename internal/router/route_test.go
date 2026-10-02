@@ -497,10 +497,10 @@ func TestRoute_matchesMethod(t *testing.T) {
 			want:        false,
 		},
 		{
-			name:        "empty route method",
+			name:        "empty route method matches any method",
 			routeMethod: "",
 			reqMethod:   "GET",
-			want:        false,
+			want:        true,
 		},
 		{
 			name:        "empty request method",

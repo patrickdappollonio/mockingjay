@@ -262,9 +262,7 @@ func (e *Engine) ExecuteTemplate(tmpl *template.Template, w io.Writer, ctx *Temp
 func (e *Engine) GetFuncMap() template.FuncMap {
 	// Return a copy to prevent external modification
 	funcMapCopy := make(template.FuncMap)
-	for k, v := range e.funcMap {
-		funcMapCopy[k] = v
-	}
+	maps.Copy(funcMapCopy, e.funcMap)
 	return funcMapCopy
 }
 

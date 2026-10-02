@@ -1,0 +1,69 @@
+# Status codes, response delays and catch-all routes
+#
+# Try it:
+#   curl -i -X POST http://localhost:8080/users
+#   curl -i http://localhost:8080/users/0
+#   curl -i http://localhost:8080/users/42
+#   curl -i -X DELETE http://localhost:8080/users/42
+#   curl -i http://localhost:8080/flaky
+#   curl -i -d "username=alice&password=wrong" http://localhost:8080/login
+#   curl -i http://localhost:8080/slow
+#   curl -i -X PATCH http://localhost:8080/anything
+
+routes:
+  # Fixed status code
+  - path: "/users"
+    method: "POST"
+    status: 201
+    template: '{"id": "{{ fakeUUID }}", "name": "{{ fakeName }}"}'
+    response_headers:
+      Content-Type: "application/json"
+
+  # Status chosen from a URL parameter
+  - path: "/^/users/(?P<id>\\d+)$/"
+    method: "GET"
+    status: '{{ if eq .Params.id "0" }}404{{ else }}200{{ end }}'
+    template: |
+      {{- if eq .Params.id "0" -}}
+      {"error": "user not found"}
+      {{- else -}}
+      {"id": {{ .Params.id }}, "name": "{{ fakeName }}"}
+      {{- end }}
+    response_headers:
+      Content-Type: "application/json"
+
+  # 204 responses are sent without a body
+  - path: "/^/users/(?P<id>\\d+)$/"
+    method: "DELETE"
+    status: 204
+    template: "deleted"
+
+  # Randomly fails about one request in four
+  - path: "/flaky"
+    method: "GET"
+    status: '{{ randChoice "200" "200" "200" "503" }}'
+    template: "flaky endpoint"
+
+  # Status based on a URL-encoded form field
+  - path: "/login"
+    method: "POST"
+    status: '{{ if eq (.Form.Get "password") "secret" }}200{{ else }}401{{ end }}'
+    template: |
+      {{- if eq (.Form.Get "password") "secret" -}}
+      Welcome, {{ .Form.Get "username" }}!
+      {{- else -}}
+      Invalid credentials for {{ .Form.Get "username" }}
+      {{- end }}
+
+  # Waits before responding
+  - path: "/slow"
+    method: "GET"
+    delay: "1500ms"
+    template: "finally here"
+
+  # No method: matches any method on any path not matched above
+  - path: "/^.*$/"
+    status: 404
+    template: '{"error": "no mock for {{ .Request.Method }} {{ .Request.URL.Path }}"}'
+    response_headers:
+      Content-Type: "application/json"

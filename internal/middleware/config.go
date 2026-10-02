@@ -15,8 +15,8 @@ type Config struct {
 
 // MiddlewareConfig represents a single middleware configuration
 type MiddlewareConfig struct {
-	Type   string                 `yaml:"type"`   // "cors", "logger", etc.
-	Config map[string]interface{} `yaml:"config"` // Type-specific configuration
+	Type   string         `yaml:"type"`   // "cors", "logger", etc.
+	Config map[string]any `yaml:"config"` // Type-specific configuration
 }
 
 // Factory creates middleware instances from configuration
@@ -61,11 +61,11 @@ func (f *Factory) CreateChain(config Config) (alice.Chain, error) {
 }
 
 // createCORSMiddleware creates CORS middleware from config map
-func (f *Factory) createCORSMiddleware(configMap map[string]interface{}) (Middleware, error) {
+func (f *Factory) createCORSMiddleware(configMap map[string]any) (Middleware, error) {
 	config := CORSConfig{}
 
 	// Parse configuration with type assertions
-	if origins, ok := configMap["allow_origins"].([]interface{}); ok {
+	if origins, ok := configMap["allow_origins"].([]any); ok {
 		config.AllowOrigins = make([]string, len(origins))
 		for i, origin := range origins {
 			if str, ok := origin.(string); ok {
@@ -74,7 +74,7 @@ func (f *Factory) createCORSMiddleware(configMap map[string]interface{}) (Middle
 		}
 	}
 
-	if methods, ok := configMap["allow_methods"].([]interface{}); ok {
+	if methods, ok := configMap["allow_methods"].([]any); ok {
 		config.AllowMethods = make([]string, len(methods))
 		for i, method := range methods {
 			if str, ok := method.(string); ok {
@@ -83,7 +83,7 @@ func (f *Factory) createCORSMiddleware(configMap map[string]interface{}) (Middle
 		}
 	}
 
-	if headers, ok := configMap["allow_headers"].([]interface{}); ok {
+	if headers, ok := configMap["allow_headers"].([]any); ok {
 		config.AllowHeaders = make([]string, len(headers))
 		for i, header := range headers {
 			if str, ok := header.(string); ok {
@@ -104,7 +104,7 @@ func (f *Factory) createCORSMiddleware(configMap map[string]interface{}) (Middle
 }
 
 // createLoggerMiddleware creates logger middleware from config map
-func (f *Factory) createLoggerMiddleware(configMap map[string]interface{}) (Middleware, error) {
+func (f *Factory) createLoggerMiddleware(configMap map[string]any) (Middleware, error) {
 	config := LoggerConfig{}
 
 	if format, ok := configMap["format"].(string); ok {
@@ -115,7 +115,7 @@ func (f *Factory) createLoggerMiddleware(configMap map[string]interface{}) (Midd
 		config.Level = level
 	}
 
-	if skipPaths, ok := configMap["skip_paths"].([]interface{}); ok {
+	if skipPaths, ok := configMap["skip_paths"].([]any); ok {
 		config.SkipPaths = make([]string, len(skipPaths))
 		for i, path := range skipPaths {
 			if str, ok := path.(string); ok {
@@ -128,7 +128,7 @@ func (f *Factory) createLoggerMiddleware(configMap map[string]interface{}) (Midd
 }
 
 // createBasicAuthMiddleware creates basic auth middleware from config map
-func (f *Factory) createBasicAuthMiddleware(configMap map[string]interface{}) (Middleware, error) {
+func (f *Factory) createBasicAuthMiddleware(configMap map[string]any) (Middleware, error) {
 	config := BasicAuthConfig{}
 
 	if username, ok := configMap["username"].(string); ok {
@@ -144,8 +144,8 @@ func (f *Factory) createBasicAuthMiddleware(configMap map[string]interface{}) (M
 	}
 
 	// Parse paths configuration
-	if pathsMap, ok := configMap["paths"].(map[string]interface{}); ok {
-		if includeList, ok := pathsMap["include"].([]interface{}); ok {
+	if pathsMap, ok := configMap["paths"].(map[string]any); ok {
+		if includeList, ok := pathsMap["include"].([]any); ok {
 			config.Paths.Include = make([]string, len(includeList))
 			for i, path := range includeList {
 				if str, ok := path.(string); ok {
@@ -154,7 +154,7 @@ func (f *Factory) createBasicAuthMiddleware(configMap map[string]interface{}) (M
 			}
 		}
 
-		if excludeList, ok := pathsMap["exclude"].([]interface{}); ok {
+		if excludeList, ok := pathsMap["exclude"].([]any); ok {
 			config.Paths.Exclude = make([]string, len(excludeList))
 			for i, path := range excludeList {
 				if str, ok := path.(string); ok {
@@ -176,7 +176,7 @@ func (f *Factory) createBasicAuthMiddleware(configMap map[string]interface{}) (M
 }
 
 // createTimeoutMiddleware creates timeout middleware from config map
-func (f *Factory) createTimeoutMiddleware(configMap map[string]interface{}) (Middleware, error) {
+func (f *Factory) createTimeoutMiddleware(configMap map[string]any) (Middleware, error) {
 	config := TimeoutConfig{}
 
 	// Parse duration from string or integer (seconds)

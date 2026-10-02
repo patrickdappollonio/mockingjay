@@ -6,7 +6,7 @@
 # 3. Multiple API endpoints with different authentication requirements
 #
 # Usage:
-#   mockingjay -config examples/advanced-middleware.yaml -port 3000
+#   mockingjay --config examples/advanced-middleware.yaml --port 3000
 #
 # Test scenarios:
 #   # Test allowed origin

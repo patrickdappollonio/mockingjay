@@ -3,6 +3,7 @@ package template
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -63,7 +64,7 @@ func TestNewTemplateContext_Basic(t *testing.T) {
 	}
 
 	// Verify body is parsed as JSON
-	jsonBody, ok := ctx.Body.(map[string]interface{})
+	jsonBody, ok := ctx.Body.(map[string]any)
 	if !ok {
 		t.Errorf("NewTemplateContext() context Body should be map[string]interface{}, got %T", ctx.Body)
 	} else {
@@ -152,7 +153,7 @@ func TestParseRequestBody_JSON(t *testing.T) {
 				actualType = "<nil>"
 			} else {
 				switch res := result.(type) {
-				case map[string]interface{}:
+				case map[string]any:
 					actualType = "map[string]interface{}"
 					// For invalid JSON, check if it contains parse_error
 					if _, hasError := res["parse_error"]; hasError && tt.body == `{invalid json}` {
@@ -162,7 +163,7 @@ func TestParseRequestBody_JSON(t *testing.T) {
 							t.Errorf("parseRequestBody() parsed JSON name = %v, want test", name)
 						}
 					}
-				case []interface{}:
+				case []any:
 					actualType = "[]interface{}"
 				case string:
 					actualType = "string"
@@ -245,7 +246,7 @@ func TestParseRequestBody_EdgeCases(t *testing.T) {
 		name       string
 		setupReq   func() *http.Request
 		wantErr    bool
-		wantResult interface{}
+		wantResult any
 	}{
 		{
 			name: "nil body",
@@ -409,13 +410,13 @@ func TestNewTemplateContext_ErrorHandling(t *testing.T) {
 }
 
 func TestNewTemplateContext_WithComplexJSON(t *testing.T) {
-	jsonData := map[string]interface{}{
-		"user": map[string]interface{}{
+	jsonData := map[string]any{
+		"user": map[string]any{
 			"id":   123,
 			"name": "John Doe",
 			"tags": []string{"admin", "developer"},
 		},
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"version":   "1.0",
 			"timestamp": "2023-01-01T00:00:00Z",
 		},
@@ -444,7 +445,7 @@ func TestNewTemplateContext_WithComplexJSON(t *testing.T) {
 	}
 
 	// Verify complex JSON body parsing
-	bodyMap, ok := ctx.Body.(map[string]interface{})
+	bodyMap, ok := ctx.Body.(map[string]any)
 	if !ok {
 		t.Errorf("NewTemplateContext() body should be map[string]interface{}, got %T", ctx.Body)
 		return
@@ -457,7 +458,7 @@ func TestNewTemplateContext_WithComplexJSON(t *testing.T) {
 		return
 	}
 
-	userMap, ok := user.(map[string]interface{})
+	userMap, ok := user.(map[string]any)
 	if !ok {
 		t.Errorf("NewTemplateContext() body.user should be map[string]interface{}, got %T", user)
 		return
@@ -474,7 +475,7 @@ func TestNewTemplateContext_WithComplexJSON(t *testing.T) {
 		return
 	}
 
-	tagsArray, ok := tags.([]interface{})
+	tagsArray, ok := tags.([]any)
 	if !ok {
 		t.Errorf("NewTemplateContext() body.user.tags should be []interface{}, got %T", tags)
 		return
@@ -534,5 +535,90 @@ func BenchmarkParseRequestBody_Text(b *testing.B) {
 		if err != nil {
 			b.Fatalf("parseRequestBody() error = %v", err)
 		}
+	}
+}
+
+func TestNewTemplateContext_Form(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		body        string
+		contentType string
+		key         string
+		want        []string
+	}{
+		{
+			name:        "form fields are parsed",
+			body:        "name=test&value=123",
+			contentType: "application/x-www-form-urlencoded",
+			key:         "name",
+			want:        []string{"test"},
+		},
+		{
+			name:        "content type with charset",
+			body:        "name=test",
+			contentType: "application/x-www-form-urlencoded; charset=utf-8",
+			key:         "name",
+			want:        []string{"test"},
+		},
+		{
+			name:        "repeated field keeps every value",
+			body:        "tag=a&tag=b",
+			contentType: "application/x-www-form-urlencoded",
+			key:         "tag",
+			want:        []string{"a", "b"},
+		},
+		{
+			name:        "encoded value is decoded",
+			body:        "q=hello+world%21",
+			contentType: "application/x-www-form-urlencoded",
+			key:         "q",
+			want:        []string{"hello world!"},
+		},
+		{
+			name:        "malformed pair does not drop valid ones",
+			body:        "bad=%zz&good=1",
+			contentType: "application/x-www-form-urlencoded",
+			key:         "good",
+			want:        []string{"1"},
+		},
+		{
+			name:        "plain text body is not parsed as a form",
+			body:        "name=test",
+			contentType: "text/plain",
+			key:         "name",
+			want:        nil,
+		},
+		{
+			name:        "JSON body is not parsed as a form",
+			body:        `{"name":"test"}`,
+			contentType: "application/json",
+			key:         "name",
+			want:        nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req, err := http.NewRequest("POST", "/test", strings.NewReader(tt.body))
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			req.Header.Set("Content-Type", tt.contentType)
+
+			ctx, err := NewTemplateContext(req, nil)
+
+			if err != nil {
+				t.Fatalf("NewTemplateContext() returned unexpected error: %v", err)
+			}
+			if ctx.Form == nil {
+				t.Fatalf("NewTemplateContext() Form is nil, want a non-nil url.Values")
+			}
+			if got := ctx.Form[tt.key]; !slices.Equal(got, tt.want) {
+				t.Errorf("NewTemplateContext(%q).Form[%q] = %q, want %q", tt.body, tt.key, got, tt.want)
+			}
+		})
 	}
 }

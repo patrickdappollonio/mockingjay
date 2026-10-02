@@ -1,12 +1,12 @@
 # Example configuration demonstrating timeout handling features
 #
 # Server-level timeouts control connection behavior and enforce hard limits
-# Timeout middleware monitors request duration and logs warnings for slow requests
+# Timeout middleware ends requests that run too long with 408 Request Timeout and logs a warning
 #
 # To test timeout monitoring:
-# 1. Start the server: mockingjay -config examples/custom-timeouts.yaml
+# 1. Start the server: mockingjay --config examples/custom-timeouts.yaml
 # 2. Make requests to see different timeout behaviors
-# 3. Check logs for timeout warnings when requests exceed 30 seconds
+# 3. Requests that run longer than 30 seconds get a 408 and a warning in the logs
 server:
   timeouts:
     read: "10s" # Maximum time to read entire request body
@@ -35,10 +35,10 @@ routes:
 
 middleware:
   enabled:
-    # Monitor request duration and log warnings for slow requests
+    # End slow requests with 408 Request Timeout and log a warning
     - type: "timeout"
       config:
-        duration: "30s" # Log warning if any request takes longer than 30 seconds
+        duration: "30s" # Return 408 if any request takes longer than 30 seconds
 
     # Enable logging to see timeout warnings in action
     - type: "logger"

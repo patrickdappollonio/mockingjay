@@ -6,7 +6,7 @@ This directory contains carefully curated examples showcasing different aspects 
 
 Run any example with:
 ```bash
-mockingjay -config examples/{example-name}.yaml
+mockingjay --config examples/{example-name}.yaml
 ```
 
 ## Example Categories
@@ -20,6 +20,7 @@ mockingjay -config examples/{example-name}.yaml
 - **[advanced-middleware.yaml](advanced-middleware.yaml)** - Production-ready middleware (CORS, auth, logging)
 - **[custom-timeouts.yaml](custom-timeouts.yaml)** - Server and middleware timeout configuration
 - **[response-headers.yaml](response-headers.yaml)** - Static and dynamic response header manipulation
+- **[status-codes.yaml](status-codes.yaml)** - Custom and templated status codes, response delays, form fields and catch-all routes
 
 ### 📄 Templates & Files
 - **[template-files.yaml](template-files.yaml)** - Using external template files instead of inline templates
@@ -94,7 +95,7 @@ routes:
 Run the following command to start the server, replacing `/path/to/config.yaml` with the path to the configuration file you saved above.
 
 ```bash
-mockingjay -config /path/to/config.yaml
+mockingjay --config /path/to/config.yaml
 ```
 
 ### 2. Header-based Routing

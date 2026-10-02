@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/fsnotify/fsnotify"
@@ -140,10 +141,12 @@ func startConfigWatcher(configFile string, srv *server.Server, logger *slog.Logg
 		return fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
-	// Add config file to watcher
-	if err := watcher.Add(configFile); err != nil {
+	// Watch the directory: editors that save by renaming a new file over the
+	// config would otherwise leave the watch on the replaced file.
+	configDir := filepath.Dir(configFile)
+	if err := watcher.Add(configDir); err != nil {
 		_ = watcher.Close() // Error ignored - returning original error is more important
-		return fmt.Errorf("failed to watch config file %q: %w", configFile, err)
+		return fmt.Errorf("failed to watch config directory %q: %w", configDir, err)
 	}
 
 	logger.Info("config file watcher started", "file", configFile)
@@ -168,8 +171,7 @@ func startConfigWatcher(configFile string, srv *server.Server, logger *slog.Logg
 					return
 				}
 
-				// Only handle write events (file modifications)
-				if event.Op&fsnotify.Write == fsnotify.Write {
+				if isConfigChange(event, configFile) {
 					logger.Info("config file changed, reloading", "file", event.Name)
 
 					if err := srv.ReloadConfig(); err != nil {
@@ -188,4 +190,12 @@ func startConfigWatcher(configFile string, srv *server.Server, logger *slog.Logg
 	}()
 
 	return nil
+}
+
+// isConfigChange reports whether event wrote or replaced configFile.
+func isConfigChange(event fsnotify.Event, configFile string) bool {
+	if filepath.Clean(event.Name) != filepath.Clean(configFile) {
+		return false
+	}
+	return event.Op&(fsnotify.Write|fsnotify.Create) != 0
 }

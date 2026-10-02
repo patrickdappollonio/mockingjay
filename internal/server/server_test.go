@@ -2,18 +2,22 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/patrickdappollonio/mockingjay/internal/config"
+	templatepkg "github.com/patrickdappollonio/mockingjay/internal/template"
 )
 
 // TestServer represents a test server instance with utilities for integration testing
@@ -205,7 +209,7 @@ func TestServer_Integration_JSONEchoEndpoint(t *testing.T) {
 	ts := NewTestServer(t, cfg)
 
 	// Test with valid JSON
-	jsonData := map[string]interface{}{
+	jsonData := map[string]any{
 		"message": "hello world",
 		"count":   42,
 	}
@@ -623,5 +627,284 @@ func TestServer_Integration_HeaderTemplateExecutionErrors(t *testing.T) {
 	body := readResponseBody(t, resp)
 	if !strings.Contains(body, "500 Internal Server Error") {
 		t.Errorf("Expected 500 error message, got %q", body)
+	}
+}
+
+func TestServer_Integration_CustomStatusCodes(t *testing.T) {
+	cfg := createTestConfig([]config.RouteConfig{
+		{Path: "/created", Method: "POST", Status: "201", Template: "created"},
+		{Path: "/flaky", Method: "GET", Status: `{{ if .Query.Get "fail" }}503{{ else }}200{{ end }}`, Template: "flaky"},
+		{Path: "/no-content", Method: "DELETE", Status: "204", Template: "this body is never sent"},
+		{Path: "/not-modified", Method: "GET", Status: "304", Template: "this body is never sent"},
+		{Path: "/not-a-number", Method: "GET", Status: "{{ .Query.Get \"code\" }}", Template: "body"},
+		{Path: "/teapot", Method: "GET", Status: "418", Template: "short and stout", ResponseHeaders: map[string]string{"X-Kind": "teapot"}},
+	})
+	ts := NewTestServer(t, cfg)
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+		wantBody   string
+	}{
+		{name: "static status with body", method: "POST", path: "/created", wantStatus: 201, wantBody: "created"},
+		{name: "templated status takes the error branch", method: "GET", path: "/flaky?fail=1", wantStatus: 503, wantBody: "flaky"},
+		{name: "templated status takes the success branch", method: "GET", path: "/flaky", wantStatus: 200, wantBody: "flaky"},
+		{name: "204 sends no body", method: "DELETE", path: "/no-content", wantStatus: 204, wantBody: ""},
+		{name: "304 sends no body", method: "GET", path: "/not-modified", wantStatus: 304, wantBody: ""},
+		{name: "templated status rendering a number", method: "GET", path: "/not-a-number?code=404", wantStatus: 404, wantBody: "body"},
+		{name: "templated status rendering text is a server error", method: "GET", path: "/not-a-number?code=abc", wantStatus: 500, wantBody: "500 Internal Server Error: response template cannot be rendered due to an error in the template\n"},
+		{name: "templated status rendering nothing is a server error", method: "GET", path: "/not-a-number", wantStatus: 500, wantBody: "500 Internal Server Error: response template cannot be rendered due to an error in the template\n"},
+		{name: "templated status out of range is a server error", method: "GET", path: "/not-a-number?code=700", wantStatus: 500, wantBody: "500 Internal Server Error: response template cannot be rendered due to an error in the template\n"},
+		{name: "templated status in the informational range is a server error", method: "GET", path: "/not-a-number?code=100", wantStatus: 500, wantBody: "500 Internal Server Error: response template cannot be rendered due to an error in the template\n"},
+		{name: "non-2xx status keeps response headers", method: "GET", path: "/teapot", wantStatus: 418, wantBody: "short and stout"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := ts.makeRequest(tt.method, tt.path, nil, nil)
+			if err != nil {
+				t.Fatalf("%s %s failed: %v", tt.method, tt.path, err)
+			}
+			body := readResponseBody(t, resp)
+
+			if resp.StatusCode != tt.wantStatus {
+				t.Errorf("%s %s status = %d, want %d", tt.method, tt.path, resp.StatusCode, tt.wantStatus)
+			}
+			if body != tt.wantBody {
+				t.Errorf("%s %s body = %q, want %q", tt.method, tt.path, body, tt.wantBody)
+			}
+		})
+	}
+
+	resp, err := ts.makeRequest("GET", "/teapot", nil, nil)
+	if err != nil {
+		t.Fatalf("GET /teapot failed: %v", err)
+	}
+	resp.Body.Close()
+	if got := resp.Header.Get("X-Kind"); got != "teapot" {
+		t.Errorf("GET /teapot X-Kind header = %q, want %q", got, "teapot")
+	}
+}
+
+func TestServer_Integration_RouteWithoutMethodMatchesAnyMethod(t *testing.T) {
+	cfg := createTestConfig([]config.RouteConfig{
+		{Path: "/get-only", Method: "GET", Template: "get only"},
+		{Path: "/.*/", Template: "catch-all {{ .Request.Method }}"},
+	})
+	ts := NewTestServer(t, cfg)
+
+	tests := []struct {
+		method   string
+		path     string
+		wantBody string
+	}{
+		{method: "GET", path: "/get-only", wantBody: "get only"},
+		{method: "POST", path: "/get-only", wantBody: "catch-all POST"},
+		{method: "DELETE", path: "/anything/else", wantBody: "catch-all DELETE"},
+		{method: "PATCH", path: "/", wantBody: "catch-all PATCH"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			resp, err := ts.makeRequest(tt.method, tt.path, nil, nil)
+			if err != nil {
+				t.Fatalf("%s %s failed: %v", tt.method, tt.path, err)
+			}
+			body := readResponseBody(t, resp)
+
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("%s %s status = %d, want 200", tt.method, tt.path, resp.StatusCode)
+			}
+			if body != tt.wantBody {
+				t.Errorf("%s %s body = %q, want %q", tt.method, tt.path, body, tt.wantBody)
+			}
+		})
+	}
+}
+
+func TestServer_Integration_Delay(t *testing.T) {
+	cfg := createTestConfig([]config.RouteConfig{
+		{Path: "/slow", Method: "GET", Delay: 150 * time.Millisecond, Template: "slow"},
+		{Path: "/very-slow", Method: "GET", Delay: 10 * time.Second, Template: "never sent"},
+		{Path: "/slow-template", Method: "GET", Template: `{{ sleep "10s" }}never sent`},
+	})
+	ts := NewTestServer(t, cfg)
+
+	t.Run("response waits for the delay", func(t *testing.T) {
+		start := time.Now()
+		resp, err := ts.makeRequest("GET", "/slow", nil, nil)
+		if err != nil {
+			t.Fatalf("GET /slow failed: %v", err)
+		}
+		body := readResponseBody(t, resp)
+		elapsed := time.Since(start)
+
+		if elapsed < 150*time.Millisecond {
+			t.Errorf("GET /slow took %s, want at least 150ms", elapsed)
+		}
+		if resp.StatusCode != http.StatusOK || body != "slow" {
+			t.Errorf("GET /slow = %d %q, want 200 %q", resp.StatusCode, body, "slow")
+		}
+	})
+
+	for _, path := range []string{"/very-slow", "/slow-template"} {
+		t.Run("cancelled request stops waiting on "+path, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+			defer cancel()
+			req := httptest.NewRequest("GET", path, nil).WithContext(ctx)
+			rec := httptest.NewRecorder()
+
+			start := time.Now()
+			ts.Server.ServeHTTP(rec, req)
+			elapsed := time.Since(start)
+
+			if rec.Code != http.StatusRequestTimeout {
+				t.Errorf("GET %s with 50ms deadline status = %d, want 408", path, rec.Code)
+			}
+			if !strings.HasPrefix(rec.Body.String(), "408 Request Timeout") {
+				t.Errorf("GET %s with 50ms deadline body = %q, want the 408 message", path, rec.Body.String())
+			}
+			if elapsed > 2*time.Second {
+				t.Errorf("GET %s with 50ms deadline took %s, want it to stop at the deadline", path, elapsed)
+			}
+		})
+	}
+}
+
+func TestServer_ReloadIsNotBlockedByDelayedRequest(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	writeConfig := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(configFile, []byte(body), 0o644); err != nil {
+			t.Fatalf("failed to write config file: %v", err)
+		}
+	}
+	writeConfig("routes:\n  - path: /slow\n    delay: 3s\n    template: slow\n")
+
+	cfg, err := config.LoadConfig(configFile)
+	if err != nil {
+		t.Fatalf("LoadConfig(%q) returned unexpected error: %v", configFile, err)
+	}
+	srv, err := NewServer(cfg, configFile, ":0", slog.New(slog.NewTextHandler(io.Discard, nil)), "test-version")
+	if err != nil {
+		t.Fatalf("NewServer() returned unexpected error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		srv.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/slow", nil).WithContext(ctx))
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-requestDone
+	})
+	time.Sleep(100 * time.Millisecond) // let the request reach its delay
+
+	writeConfig("routes:\n  - path: /fast\n    template: fast\n")
+	start := time.Now()
+	if err := srv.ReloadConfig(); err != nil {
+		t.Fatalf("ReloadConfig() returned unexpected error: %v", err)
+	}
+
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("ReloadConfig() took %s while a delayed request was in flight, want under 1s", elapsed)
+	}
+}
+
+func TestServer_Integration_FormFields(t *testing.T) {
+	cfg := createTestConfig([]config.RouteConfig{
+		{Path: "/login", Method: "POST", Template: `user={{ .Form.Get "user" }} tags={{ index .Form "tag" }}`},
+	})
+	ts := NewTestServer(t, cfg)
+
+	resp, err := ts.makeRequest("POST", "/login", strings.NewReader("user=alice&tag=a&tag=b"), map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	})
+	if err != nil {
+		t.Fatalf("POST /login failed: %v", err)
+	}
+	body := readResponseBody(t, resp)
+
+	if want := "user=alice tags=[a b]"; body != want {
+		t.Errorf("POST /login body = %q, want %q", body, want)
+	}
+}
+
+func TestServer_HealthCheckReportsVersion(t *testing.T) {
+	ts := NewTestServer(t, createTestConfig([]config.RouteConfig{
+		{Path: "/x", Method: "GET", Template: "x"},
+	}))
+
+	resp, err := ts.makeRequest("GET", "/health", nil, nil)
+	if err != nil {
+		t.Fatalf("GET /health failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var health HealthCheckResponse
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		t.Fatalf("failed to decode health check response: %v", err)
+	}
+	if health.Version != "test-version" {
+		t.Errorf("GET /health version = %q, want %q", health.Version, "test-version")
+	}
+}
+
+func TestRenderBody(t *testing.T) {
+	engine := templatepkg.NewEngine()
+	data := &templatepkg.TemplateContext{Params: map[string]string{"name": "alice"}}
+
+	tests := []struct {
+		name        string
+		source      string
+		deadline    time.Duration
+		wantBody    string
+		wantErr     error
+		wantAnyErr  bool
+		maxDuration time.Duration
+	}{
+		{name: "renders the template", source: "hello {{ .Params.name }}", deadline: time.Second, wantBody: "hello alice"},
+		{name: "template error is returned", source: "{{ .Params.name.Missing }}", deadline: time.Second, wantAnyErr: true},
+		{name: "deadline ends the wait", source: `{{ sleep "10s" }}late`, deadline: 50 * time.Millisecond, wantErr: context.DeadlineExceeded, maxDuration: 2 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := engine.CompileInlineTemplate("render_body_test", tt.source)
+			if err != nil {
+				t.Fatalf("CompileInlineTemplate(%q) returned unexpected error: %v", tt.source, err)
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), tt.deadline)
+			defer cancel()
+
+			start := time.Now()
+			body, err := renderBody(ctx, engine, tmpl, data)
+			elapsed := time.Since(start)
+
+			switch {
+			case tt.wantErr != nil:
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("renderBody(%q) error = %v, want %v", tt.source, err, tt.wantErr)
+				}
+			case tt.wantAnyErr:
+				if err == nil {
+					t.Errorf("renderBody(%q) error = nil, want an error", tt.source)
+				}
+			default:
+				if err != nil {
+					t.Fatalf("renderBody(%q) returned unexpected error: %v", tt.source, err)
+				}
+				if string(body) != tt.wantBody {
+					t.Errorf("renderBody(%q) = %q, want %q", tt.source, body, tt.wantBody)
+				}
+			}
+			if tt.maxDuration > 0 && elapsed > tt.maxDuration {
+				t.Errorf("renderBody(%q) took %s, want under %s", tt.source, elapsed, tt.maxDuration)
+			}
+		})
 	}
 }

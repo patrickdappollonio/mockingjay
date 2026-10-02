@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"text/template"
@@ -35,6 +36,7 @@ func (c *Compiler) CompileRoute(routeConfig config.RouteConfig) (*Route, error) 
 	route := &Route{
 		Pattern: routeConfig.Path,
 		Method:  routeConfig.GetNormalizedMethod(),
+		Delay:   routeConfig.Delay,
 	}
 
 	// Determine if this is a regex pattern
@@ -58,6 +60,10 @@ func (c *Compiler) CompileRoute(routeConfig config.RouteConfig) (*Route, error) 
 	// Compile response header templates
 	if err := c.compileResponseHeaders(route, routeConfig); err != nil {
 		return nil, fmt.Errorf("failed to compile response headers for route %q: %w", routeConfig.Path, err)
+	}
+
+	if err := c.compileStatus(route, routeConfig); err != nil {
+		return nil, fmt.Errorf("failed to compile status for route %q: %w", routeConfig.Path, err)
 	}
 
 	// Compile the template
@@ -239,5 +245,27 @@ func (c *Compiler) compileResponseHeaders(route *Route, routeConfig config.Route
 		route.ResponseHeaders[canonicalName] = headerTemplate
 	}
 
+	return nil
+}
+
+// compileStatus sets a numeric status directly and compiles anything else as a template.
+func (c *Compiler) compileStatus(route *Route, routeConfig config.RouteConfig) error {
+	if strings.TrimSpace(routeConfig.Status) == "" {
+		route.Status = http.StatusOK
+		return nil
+	}
+
+	if code, ok := routeConfig.StaticStatus(); ok {
+		route.Status = code
+		return nil
+	}
+
+	templateName := fmt.Sprintf("status_%s_%s", routeConfig.GetNormalizedMethod(), sanitizeTemplateName(routeConfig.Path))
+	statusTemplate, err := c.engine.CompileInlineTemplate(templateName, routeConfig.Status)
+	if err != nil {
+		return fmt.Errorf("failed to compile status template %q: %w", routeConfig.Status, err)
+	}
+
+	route.StatusTmpl = statusTemplate
 	return nil
 }

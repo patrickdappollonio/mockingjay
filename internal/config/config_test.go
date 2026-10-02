@@ -48,6 +48,40 @@ func TestLoadConfig_ValidYAML(t *testing.T) {
     template: "running"`,
 			wantErr: false,
 		},
+		{
+			name: "route without method matches any method",
+			yamlData: `routes:
+  - path: "/any"
+    template: "any"`,
+			wantErr: false,
+		},
+		{
+			name: "numeric status",
+			yamlData: `routes:
+  - path: "/created"
+    method: POST
+    status: 201
+    template: "created"`,
+			wantErr: false,
+		},
+		{
+			name: "templated status",
+			yamlData: `routes:
+  - path: "/flaky"
+    method: GET
+    status: '{{ if .Query.Get "fail" }}503{{ else }}200{{ end }}'
+    template: "flaky"`,
+			wantErr: false,
+		},
+		{
+			name: "delay",
+			yamlData: `routes:
+  - path: "/slow"
+    method: GET
+    delay: "250ms"
+    template: "slow"`,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -139,13 +173,6 @@ func TestLoadConfig_MissingRequiredFields(t *testing.T) {
 			wantErr: "path cannot be empty",
 		},
 		{
-			name: "missing method",
-			yamlData: `routes:
-  - path: "/test"
-    template: "test"`,
-			wantErr: "HTTP method cannot be empty",
-		},
-		{
 			name: "missing template and template_file",
 			yamlData: `routes:
   - path: "/test"
@@ -216,6 +243,51 @@ func TestLoadConfig_InvalidFieldCombinations(t *testing.T) {
     method: GET
     template: "test"`,
 			wantErr: "invalid regex pattern",
+		},
+		{
+			name: "status above range",
+			yamlData: `routes:
+  - path: "/test"
+    method: GET
+    status: 600
+    template: "test"`,
+			wantErr: "invalid status code 600",
+		},
+		{
+			name: "informational status",
+			yamlData: `routes:
+  - path: "/test"
+    method: GET
+    status: 100
+    template: "test"`,
+			wantErr: "invalid status code 100",
+		},
+		{
+			name: "status that is neither a number nor a template",
+			yamlData: `routes:
+  - path: "/test"
+    method: GET
+    status: "created"
+    template: "test"`,
+			wantErr: `status "created" must be a number or a template`,
+		},
+		{
+			name: "status template with syntax error",
+			yamlData: `routes:
+  - path: "/test"
+    method: GET
+    status: "{{ if }}"
+    template: "test"`,
+			wantErr: "failed to compile status template for route[0]",
+		},
+		{
+			name: "negative delay",
+			yamlData: `routes:
+  - path: "/test"
+    method: GET
+    delay: "-1s"
+    template: "test"`,
+			wantErr: "delay cannot be negative",
 		},
 	}
 
@@ -352,14 +424,44 @@ func TestRouteConfig_Validate(t *testing.T) {
 			errMsg:  "path cannot be empty",
 		},
 		{
-			name: "empty method",
+			name: "empty method matches any method",
 			route: RouteConfig{
 				Path:     "/test",
 				Method:   "",
 				Template: "test",
 			},
+			wantErr: false,
+		},
+		{
+			name: "lowest valid status",
+			route: RouteConfig{
+				Path:     "/test",
+				Method:   "GET",
+				Status:   "200",
+				Template: "test",
+			},
+			wantErr: false,
+		},
+		{
+			name: "highest valid status",
+			route: RouteConfig{
+				Path:     "/test",
+				Method:   "GET",
+				Status:   "599",
+				Template: "test",
+			},
+			wantErr: false,
+		},
+		{
+			name: "status below range",
+			route: RouteConfig{
+				Path:     "/test",
+				Method:   "GET",
+				Status:   "199",
+				Template: "test",
+			},
 			wantErr: true,
-			errMsg:  "HTTP method cannot be empty",
+			errMsg:  "invalid status code 199",
 		},
 		{
 			name: "invalid method",
@@ -1236,6 +1338,35 @@ routes:
     method: GET
     template: "Hello <% .Name %>! Invalid: {{ .Other }}"`,
 			wantErr: false, // {{ .Other }} should be treated as literal text, not template
+		},
+		{
+			name: "status template with custom delimiters",
+			yamlData: `
+template:
+  delimiters:
+    left: "<%"
+    right: "%>"
+routes:
+  - path: "/test"
+    method: GET
+    status: '<% if .Query.Get "fail" %>500<% else %>200<% end %>'
+    template: "test"`,
+			wantErr: false,
+		},
+		{
+			name: "status written with default delimiters when custom ones are set",
+			yamlData: `
+template:
+  delimiters:
+    left: "<%"
+    right: "%>"
+routes:
+  - path: "/test"
+    method: GET
+    status: "{{ 500 }}"
+    template: "test"`,
+			wantErr: true,
+			errMsg:  "must be a number or a template",
 		},
 	}
 
